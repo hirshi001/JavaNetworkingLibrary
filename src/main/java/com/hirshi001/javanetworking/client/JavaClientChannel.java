@@ -120,7 +120,7 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> openTCP() {
+    public RestFuture<?, Channel> startTCP() {
         return RestFuture.create(()->{
             Socket socket = new Socket(address.getAddress(), address.getPort(), InetAddress.getLocalHost(), localPort);
             tcpSide.connect(socket);
@@ -144,8 +144,7 @@ public class JavaClientChannel extends BaseChannel {
                                     context.channel = this;
                                     context.networkSide = client;
                                     onPacketReceived(context);
-                                    getListenerHandler().TCPReceived(context);
-                                    ((JavaClient) getSide()).getClientListenerHandler().TCPReceived(context);
+                                    ((JavaClient) getSide()).getClientListenerHandler().onTCPReceived(context);
                                 } else {
                                     buffer.resetReaderIndex();
                                     break;
@@ -163,7 +162,7 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> closeTCP() {
+    public RestFuture<?, Channel> stopTCP() {
         return RestFuture.create(()->{
             synchronized (tcpLock) {
                 tcpSide.disconnect();
@@ -176,8 +175,7 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> openUDP() {
-        System.out.println("hi");
+    public RestFuture<?, Channel> startUDP() {
         return RestFuture.create(()-> {
             synchronized (udpLock) {
                 if (udpFuture != null) {
@@ -200,8 +198,7 @@ public class JavaClientChannel extends BaseChannel {
                             context.channel = this;
                             context.networkSide = client;
                             onPacketReceived(context);
-                            getListenerHandler().UDPReceived(context);
-                            ((JavaClient) getSide()).getClientListenerHandler().UDPReceived(context);
+                            ((JavaClient) getSide()).getClientListenerHandler().onUDPReceived(context);
                         }
                     }
                 }, 0, 1, TimeUnit.MILLISECONDS);
@@ -211,7 +208,7 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> closeUDP() {
+    public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()-> {
             synchronized (udpLock) {
                 if (udpFuture != null) {

@@ -78,7 +78,7 @@ public class JavaTest {
                 register(new PacketHolder<>(IntegerPacket::new, null , IntegerPacket.class), 0);
 
         client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
-        client.connectTCP().perform().get();
+        client.startTCP().perform().get();
 
         System.out.println("Sending packets");
         for(int i=0;i<100;i++) {
@@ -91,7 +91,7 @@ public class JavaTest {
         System.out.println("Finished");
 
         server.close();
-        client.disconnectTCP().perform().get();
+        client.stopTCP().perform().get();
         client.stopUDP().perform().get();
     }
 
@@ -111,10 +111,9 @@ public class JavaTest {
                 register(new PacketHolder<>(IntegerPacket::new, null , IntegerPacket.class), 0);
         client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
         client.startUDP().perform().get();
-        client.connectTCP().perform().get();
+        client.startTCP().perform().get();
 
         for(int i=0;i<5;i++) {
-
             client.sendUDPWithResponse(new IntegerPacket(i+1), null, 10000).
                     then((context) -> System.out.println("Response from server: " + context.packet)).
                     perform();
@@ -131,7 +130,7 @@ public class JavaTest {
         String message = "Hello: From client: " + ip.value + ". To client:" + ThreadLocalRandom.current().nextInt(ip.value);
         StringPacket response = new StringPacket(message);
         response.setResponsePacket(ip);
-        context.channel.sendUDP(response, null).perform();
+        context.channel.sendTCP(response, null).perform();
     }
 
 }

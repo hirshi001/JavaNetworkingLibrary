@@ -11,6 +11,7 @@ import com.hirshi001.restapi.RestFuture;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 
 public class JavaClient extends BaseClient {
@@ -34,13 +35,37 @@ public class JavaClient extends BaseClient {
     }
 
     @Override
-    public RestFuture<?, Client> connectTCP() {
+    public boolean isClosed() {
+        return channel.isClosed();
+    }
+
+    @Override
+    public boolean isOpen() {
+        return channel.isOpen();
+    }
+
+    @Override
+    public void close() {
+        try {
+            stopTCP().perform().get();
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        }
+        try {
+            stopUDP().perform().get();
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public RestFuture<?, Client> startTCP() {
         return RestFuture.create((future, inputNull)->{
             createChannelIfNull();
             if(!channel.supportsTCP()){
                 future.setCause(new UnsupportedOperationException("TCP is not supported on this client"));
             }else{
-                channel.openTCP().perform();
+                channel.startTCP().perform();
                 future.taskFinished(this);
             }
         });
@@ -53,20 +78,20 @@ public class JavaClient extends BaseClient {
             if(!channel.supportsUDP()){
                 future.setCause(new UnsupportedOperationException("UDP is not supported on this client"));
             }else{
-                channel.openUDP().perform();
+                channel.startUDP().perform();
                 future.taskFinished(this);
             }
         });
     }
 
     @Override
-    public RestFuture<?, Client> disconnectTCP() {
-        return channel.closeTCP().map((c)->this);
+    public RestFuture<?, Client> stopTCP() {
+        return channel.stopTCP().map((c)->this);
     }
 
     @Override
     public RestFuture<?, Client> stopUDP() {
-        return channel.closeUDP().map((c)->this);
+        return channel.stopUDP().map((c)->this);
     }
 
     private void createChannelIfNull(){

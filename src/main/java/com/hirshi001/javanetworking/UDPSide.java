@@ -56,6 +56,10 @@ public class UDPSide {
         return packet;
     }
 
+    public void setBufferSize(int size){
+        buffer = new byte[size];
+    }
+
 
     public <T> void setOption(ChannelOption<T> option, T value){
         options.put(option, value);

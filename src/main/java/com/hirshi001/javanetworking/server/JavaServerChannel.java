@@ -59,9 +59,7 @@ public class JavaServerChannel extends BaseChannel {
                         context.channel = this;
                         context.networkSide = server;
                         onPacketReceived(context);
-                        getListenerHandler().TCPReceived(context);
                         ((JavaServer) getSide()).getServerListenerHandler().onTCPReceived(context);
-
                     } else {
                         buffer.resetReaderIndex();
                         break;
@@ -81,7 +79,6 @@ public class JavaServerChannel extends BaseChannel {
             context.channel = this;
             context.networkSide = server;
             onPacketReceived(context);
-            getListenerHandler().UDPReceived(context);
             ((JavaServer) getSide()).getServerListenerHandler().onUDPReceived(context);
         }
 
@@ -129,12 +126,12 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> openTCP() {
+    public RestFuture<?, Channel> startTCP() {
         return RestFuture.create(()->{throw new UnsupportedOperationException("Cannot open TCP on the Server side");});
     }
 
     @Override
-    public RestFuture<?, Channel> closeTCP() {
+    public RestFuture<?, Channel> stopTCP() {
         return RestFuture.create(()->{
             tcpSide.disconnect();
             if(future!=null){
@@ -145,7 +142,7 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> openUDP() {
+    public RestFuture<?, Channel> startUDP() {
         return RestFuture.create(()->{
             udpClosed.set(false);
             return this;
@@ -153,7 +150,7 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> closeUDP() {
+    public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()->{
             udpClosed.set(true);
             return this;

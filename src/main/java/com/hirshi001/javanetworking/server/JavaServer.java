@@ -3,7 +3,9 @@ package com.hirshi001.javanetworking.server;
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
 import com.hirshi001.javanetworking.UDPSide;
 import com.hirshi001.networking.network.channel.ChannelInitializer;
+import com.hirshi001.networking.network.channel.ChannelOption;
 import com.hirshi001.networking.network.channel.ChannelSet;
+import com.hirshi001.networking.network.channel.DefaultChannelSet;
 import com.hirshi001.networking.network.server.BaseServer;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.network.server.ServerListener;
@@ -14,7 +16,10 @@ import com.hirshi001.restapi.RestFuture;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.util.Map;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 public class JavaServer extends BaseServer<JavaServerChannel> {
@@ -26,6 +31,11 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     private final Object tcpLock = new Object();
     private final Object udpLock = new Object();
+
+    private final AtomicBoolean isTCPClosed = new AtomicBoolean(true);
+    private final AtomicBoolean isUDPClosed = new AtomicBoolean(true);
+
+    private final Map<ServerOption, Object> options = new ConcurrentHashMap<>();
 
     public JavaServer(ScheduledExecutorService scheduledExecutorService, NetworkData networkData, BufferFactory bufferFactory, int port) {
         super(networkData, bufferFactory, port);
@@ -40,7 +50,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     }
 
     @Override
-    public RestFuture<Server, Server> startTCP() {
+    public RestFuture<?, Server> startTCP() {
         return RestFuture.create(()->{
             synchronized (tcpLock) {
                 if(tcpServerFuture != null) {
@@ -51,14 +61,24 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                         tcpServer.start((socket)->{
                             int port = socket.getPort();
                             InetSocketAddress address = (InetSocketAddress) socket.getRemoteSocketAddress();
-                            Supplier<JavaServerChannel> supplier = ()-> new JavaServerChannel(executor, this, address,  getBufferFactory());
 
-                            JavaServerChannel channel = getClients().getOrCreate(address.getAddress().getAddress(), port, supplier, (c)->{
-                                ChannelInitializer ci = getChannelInitializer();
-                                if(ci != null) ci.initChannel(c);
-                            });
+                            DefaultChannelSet<JavaServerChannel> channelSet = getClients();
+                            JavaServerChannel channel;
+                            synchronized (channelSet.getLock()){
+                                channel = channelSet.get(address.getAddress().getAddress(), port);
+                                if(channel==null){
+                                    channel = new JavaServerChannel(executor, this, address, getBufferFactory());
+                                    if(!addChannel(channel)){
+                                        try {
+                                            socket.close();
+                                        } catch (IOException e) {e.printStackTrace();}
+                                        return;
+                                    }
+                                }
+                            }
                             channel.connect(socket);
- });
+                        });
+                        isTCPClosed.set(false);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -77,7 +97,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     }
 
     @Override
-    public RestFuture<Server, Server> startUDP() {
+    public RestFuture<?, Server> startUDP() {
         return RestFuture.create(()->{
             synchronized (udpLock) {
                 if(udpServerFuture != null) {
@@ -89,48 +109,50 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                         DatagramPacket packet = udpSide.receive();
                         if(packet != null) {
 
-                            JavaServerChannel channel = getClients()
-                                    .getOrCreate(
-                                            packet.getAddress().getAddress(),
-                                            packet.getPort(),
-                                            ()-> new JavaServerChannel(executor, this, new InetSocketAddress(packet.getAddress(), packet.getPort()),
-                                                    getBufferFactory()),
-                                            (c)-> {
-                                                ChannelInitializer init = getChannelInitializer();
-                                                if(init != null)init.initChannel(c);
-                                            });
+                            DefaultChannelSet<JavaServerChannel> channelSet = getClients();
+                            JavaServerChannel channel;
+                            synchronized (channelSet.getLock()) {
+                                channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
+                                if (channel == null) {
+                                    channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
+                                    if (!addChannel(channel)) return;
+                                };
+                            }
                             channel.udpPacketReceived(packet.getData(), packet.getLength());
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }, 0, 1, TimeUnit.MILLISECONDS);
+                isUDPClosed.set(false);
             }
             return this;
         });
     }
 
     @Override
-    public RestFuture<Server, Server> stopTCP() {
+    public RestFuture<?, Server> stopTCP() {
         return RestFuture.create(()->{
             synchronized (tcpLock) {
                 if(tcpServerFuture != null) {
                     tcpServerFuture.cancel(true);
                     tcpServerFuture = null;
                 }
+                isTCPClosed.set(true);
             }
             return this;
         });
     }
 
     @Override
-    public RestFuture<Server, Server> stopUDP() {
+    public RestFuture<?, Server> stopUDP() {
         return RestFuture.create(()->{
             synchronized (udpLock) {
                 if(udpServerFuture != null) {
                     udpServerFuture.cancel(true);
                     udpServerFuture = null;
                 }
+                isUDPClosed.set(true);
             }
             return this;
         });
@@ -138,12 +160,28 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public <T> void setServerOption(ServerOption<T> option, T value) {
+        options.put(option, value);
+    }
 
+    private void activateOption(ServerOption option, Object value) {
+        if(option==ServerOption.MAX_CLIENTS){
+           // getClients().setMaxClients((int)value);
+        }
+        else if(option==ServerOption.RECEIVE_BUFFER_SIZE){ //for udp packets
+            udpSide.setOption(ChannelOption.UDP_RECEIVE_BUFFER_SIZE, (Integer) value);
+            udpSide.setBufferSize((Integer) value);
+        }
+        else if(option==ServerOption.SET_SO_TIMEOUT){
+
+        }
+        else if(option==ServerOption.REUSE_ADDRESS){
+            //tcpServer.setOption(ChannelOption.SO_REUSEADDR, (Boolean) value);
+        }
     }
 
     @Override
     public <T> T getServerOption(ServerOption<T> option) {
-        return null;
+        return (T) options.get(option);
     }
 
     @Override
@@ -153,16 +191,23 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         }
+
         try {
             stopUDP().perform().get();
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         }
+
     }
 
     @Override
     public boolean isClosed() {
-        return false;
+        return isTCPClosed.get() && isUDPClosed.get();
+    }
+
+    @Override
+    public boolean isOpen() {
+        return !isClosed();
     }
 
     @Override

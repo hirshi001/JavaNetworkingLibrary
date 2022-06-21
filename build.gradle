@@ -25,7 +25,7 @@ dependencies {
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
     testImplementation 'com.github.hirshi001:betterlogger:abc1763f95'
 
-    api 'com.github.hirshi001:betternetworking:3fc48248e4'
+    api 'com.github.hirshi001:betternetworking:b24c4a3aba'
 }
 
 test {
