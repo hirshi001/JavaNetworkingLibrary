@@ -1,13 +1,8 @@
 package com.hirshi001.javanetworking;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
-import com.hirshi001.buffer.buffers.ArrayBackedByteBuffer;
 import com.hirshi001.buffer.buffers.ByteBuffer;
-import com.hirshi001.buffer.buffers.CircularArrayBackedByteBuffer;
-import com.hirshi001.javanetworking.JavaOptionMap;
-import com.hirshi001.networking.network.NetworkSide;
 import com.hirshi001.networking.network.channel.ChannelOption;
-import com.hirshi001.networking.packetdecoderencoder.SimplePacketEncoderDecoder;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,7 +11,7 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class TCPSide {
+public class TCPSocket {
 
     private final ByteBuffer buffer;
     private Socket socket;
@@ -24,8 +19,8 @@ public class TCPSide {
 
     int lastSize;
 
-    public TCPSide(BufferFactory factory){
-        this.buffer = new ArrayBackedByteBuffer(factory); //TODO: Fix CircularArrayBackedByteBuffer (get/put method likely broken) //new CircularArrayBackedByteBuffer(1024, factory);
+    public TCPSocket(BufferFactory factory){
+        this.buffer = factory.circularBuffer(64);
         this.options = new ConcurrentHashMap<>();
         lastSize = buffer.size();
     }
@@ -62,6 +57,7 @@ public class TCPSide {
 
             int available = in.available();
             if(available > 0){
+                buffer.ensureWritable(available);
                 for(int i = 0; i < available; i++){
                     buffer.writeByte(in.read());
                 }
@@ -81,7 +77,15 @@ public class TCPSide {
         try {
             OutputStream outputStream = socket.getOutputStream();
             outputStream.write(data, offset, length);
-            outputStream.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void flush(){
+        if(!isConnected()) return;
+        try {
+            socket.getOutputStream().flush();
         } catch (IOException e) {
             e.printStackTrace();
         }

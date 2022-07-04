@@ -8,6 +8,7 @@ import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.networkdata.NetworkData;
 
+import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 
 public class JavaNetworkFactory implements NetworkFactory {
@@ -20,7 +21,12 @@ public class JavaNetworkFactory implements NetworkFactory {
 
     @Override
     public Server createServer(NetworkData networkData, BufferFactory bufferFactory, int port) {
-        return new JavaServer(executor, networkData, bufferFactory, port);
+        try {
+            return new JavaServer(executor, networkData, bufferFactory, port);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     @Override

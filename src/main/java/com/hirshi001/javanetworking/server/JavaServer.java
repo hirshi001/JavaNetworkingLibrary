@@ -1,10 +1,7 @@
 package com.hirshi001.javanetworking.server;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
-import com.hirshi001.javanetworking.UDPSide;
-import com.hirshi001.networking.network.channel.ChannelInitializer;
-import com.hirshi001.networking.network.channel.ChannelOption;
-import com.hirshi001.networking.network.channel.ChannelSet;
+import com.hirshi001.javanetworking.UDPSocket;
 import com.hirshi001.networking.network.channel.DefaultChannelSet;
 import com.hirshi001.networking.network.server.BaseServer;
 import com.hirshi001.networking.network.server.Server;
@@ -16,15 +13,14 @@ import com.hirshi001.restapi.RestFuture;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
 
+@SuppressWarnings("unchecked")
 public class JavaServer extends BaseServer<JavaServerChannel> {
 
-    private UDPSide udpSide;
+    private UDPSocket udpSide;
     private TCPServer tcpServer;
     private Future<?> tcpServerFuture, udpServerFuture;
     private ScheduledExecutorService executor;
@@ -37,16 +33,13 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     private final Map<ServerOption, Object> options = new ConcurrentHashMap<>();
 
-    public JavaServer(ScheduledExecutorService scheduledExecutorService, NetworkData networkData, BufferFactory bufferFactory, int port) {
+    public JavaServer(ScheduledExecutorService scheduledExecutorService, NetworkData networkData, BufferFactory bufferFactory, int port) throws IOException {
         super(networkData, bufferFactory, port);
         this.executor = scheduledExecutorService;
 
         tcpServer = new TCPServer(getPort());
-        try {
-            this.udpSide = new UDPSide(port);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        this.udpSide = new UDPSocket();
+        udpSide.connect(getPort());
     }
 
     @Override
@@ -92,7 +85,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         return serverListenerHandler;
     }
 
-    public UDPSide getUDPSide(){
+    public UDPSocket getUDPSide(){
         return udpSide;
     }
 
@@ -140,6 +133,16 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                 }
                 isTCPClosed.set(true);
             }
+            DefaultChannelSet<JavaServerChannel> channelSet = getClients();
+            synchronized (channelSet.getLock()) {
+                channelSet.forEach((channel) -> {
+                    try {
+                        channel.stopTCP().perform().get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
             return this;
         });
     }
@@ -152,7 +155,19 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                     udpServerFuture.cancel(true);
                     udpServerFuture = null;
                 }
+                for(JavaServerChannel channel : getClients()) {
+                    channel.stopUDP().perform().get();
+                }
                 isUDPClosed.set(true);
+            }
+            synchronized (channelSet.getLock()) {
+                channelSet.forEach((channel) -> {
+                    try {
+                        channel.stopUDP().perform().get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        e.printStackTrace();
+                    }
+                });
             }
             return this;
         });
@@ -161,21 +176,15 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     @Override
     public <T> void setServerOption(ServerOption<T> option, T value) {
         options.put(option, value);
+        activateOption(option, value);
     }
 
-    private void activateOption(ServerOption option, Object value) {
+    private <T> void activateOption(ServerOption<T> option, T value) {
         if(option==ServerOption.MAX_CLIENTS){
-           // getClients().setMaxClients((int)value);
+             getClients().setMaxSize((Integer) value);
         }
         else if(option==ServerOption.RECEIVE_BUFFER_SIZE){ //for udp packets
-            udpSide.setOption(ChannelOption.UDP_RECEIVE_BUFFER_SIZE, (Integer) value);
             udpSide.setBufferSize((Integer) value);
-        }
-        else if(option==ServerOption.SET_SO_TIMEOUT){
-
-        }
-        else if(option==ServerOption.REUSE_ADDRESS){
-            //tcpServer.setOption(ChannelOption.SO_REUSEADDR, (Boolean) value);
         }
     }
 

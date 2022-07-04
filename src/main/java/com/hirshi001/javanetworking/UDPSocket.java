@@ -1,33 +1,35 @@
 package com.hirshi001.javanetworking;
 
-import com.hirshi001.buffer.bufferfactory.BufferFactory;
-import com.hirshi001.buffer.buffers.ArrayBackedByteBuffer;
-import com.hirshi001.javanetworking.JavaOptionMap;
 import com.hirshi001.networking.network.channel.ChannelOption;
 
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class UDPSide {
+public class UDPSocket {
 
     private DatagramChannel channel;
     byte[] buffer;
     private Map<ChannelOption, Object> options;
+    private int localPort;
 
-    public UDPSide(int localPort) throws IOException {
+    public UDPSocket() {
+
+    }
+
+    public void connect(int localPort) throws IOException {
         channel = DatagramChannel.open();
         channel.bind(new InetSocketAddress(localPort));
+        this.localPort = channel.socket().getLocalPort();
         channel.configureBlocking(false);
 
         options = new ConcurrentHashMap<>();
 
         buffer = new byte[1024];
-
     }
 
     public int getPort() {
@@ -43,13 +45,27 @@ public class UDPSide {
         }
     }
 
+    public void close(){
+        try {
+            if(channel!=null) channel.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public boolean isConnected(){
+        return channel != null && channel.isOpen();
+    }
+
+
+
     public DatagramPacket receive() throws IOException {
         ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
         InetSocketAddress address = (InetSocketAddress) channel.receive(byteBuffer);
         if(address == null) return null;
 
         int size = byteBuffer.position();
-        DatagramPacket packet = new DatagramPacket(buffer.clone(), size);
+        DatagramPacket packet = new DatagramPacket(byteBuffer.array().clone(), size);
         packet.setSocketAddress(address);
         packet.setAddress(address.getAddress());
 
@@ -59,7 +75,6 @@ public class UDPSide {
     public void setBufferSize(int size){
         buffer = new byte[size];
     }
-
 
     public <T> void setOption(ChannelOption<T> option, T value){
         options.put(option, value);

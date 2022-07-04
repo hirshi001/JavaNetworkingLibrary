@@ -2,17 +2,11 @@ package com.hirshi001.javanetworking.client;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
 import com.hirshi001.buffer.buffers.ByteBuffer;
-import com.hirshi001.javanetworking.JavaOptionMap;
-import com.hirshi001.javanetworking.TCPSide;
-import com.hirshi001.javanetworking.UDPSide;
-import com.hirshi001.javanetworking.server.JavaServer;
-import com.hirshi001.javanetworking.server.JavaServerChannel;
-import com.hirshi001.networking.network.NetworkSide;
-import com.hirshi001.networking.network.channel.*;
+import com.hirshi001.javanetworking.TCPSocket;
+import com.hirshi001.javanetworking.UDPSocket;
+import com.hirshi001.networking.network.channel.BaseChannel;
+import com.hirshi001.networking.network.channel.Channel;
 import com.hirshi001.networking.network.client.Client;
-import com.hirshi001.networking.packetdecoderencoder.PacketEncoderDecoder;
-import com.hirshi001.networking.packethandlercontext.PacketHandlerContext;
-import com.hirshi001.networking.packethandlercontext.PacketType;
 import com.hirshi001.restapi.RestFuture;
 
 import java.io.IOException;
@@ -26,34 +20,23 @@ import java.util.concurrent.TimeUnit;
 
 public class JavaClientChannel extends BaseChannel {
 
-    final Client client;
     final InetSocketAddress address;
-    final TCPSide tcpSide;
-    final UDPSide udpSide;
+    final TCPSocket tcpSide;
+    final UDPSocket udpSide;
     final BufferFactory bufferFactory;
 
-    int localPort = 0;
+    int localPort=0;
     private ScheduledFuture<?> tcpFuture, udpFuture;
-    private final Object tcpLock = new Object(), udpLock = new Object();
+    private final Object tcpLock = new Object(), udpLock = new Object(), connectLock = new Object();
 
 
     public JavaClientChannel(ScheduledExecutorService executor, Client client, InetSocketAddress address, BufferFactory bufferFactory) {
-        super(executor);
-        clientListenerHandler = new ChannelListenerHandler();
-        this.client = client;
+        super(client, executor);
         this.address = address;
         this.bufferFactory = bufferFactory;
 
-        this.tcpSide = new TCPSide(bufferFactory);
-        UDPSide tempUdpSide = null;
-
-        try {
-            tempUdpSide = new UDPSide(0);
-            localPort = tempUdpSide.getLocalPort();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        this.udpSide = tempUdpSide;
+        this.tcpSide = new TCPSocket(bufferFactory);
+        this.udpSide = new UDPSocket();
 
     }
 
@@ -93,69 +76,48 @@ public class JavaClientChannel extends BaseChannel {
         return address.getAddress().getAddress();
     }
 
+
     @Override
-    public <T> void setChannelOption(ChannelOption<T> option, T value) {
-        if(supportsUDP() && JavaOptionMap.DATAGRAM_SOCKET_OPTION_MAP.containsKey(option)) {
-            udpSide.setOption(option, value);
-        }
-        if(supportsTCP() && JavaOptionMap.SOCKET_OPTION_MAP.containsKey(option)) {
-            tcpSide.setOption(option, value);
-        }
+    public JavaClient getSide() {
+        return (JavaClient) super.getSide();
     }
 
     @Override
-    public <T> T getChannelOption(ChannelOption<T> option) {
-        if(supportsUDP() && JavaOptionMap.DATAGRAM_SOCKET_OPTION_MAP.containsKey(option)) {
-            return udpSide.getOption(option);
-        }
-        if(supportsTCP() && JavaOptionMap.SOCKET_OPTION_MAP.containsKey(option)) {
-            return tcpSide.getOption(option);
-        }
-        return null;
+    public RestFuture<?, Channel> flushUDP() {
+        return RestFuture.create(()-> this);
     }
 
     @Override
-    public NetworkSide getSide() {
-        return client;
+    public RestFuture<?, Channel> flushTCP() {
+        return RestFuture.create(()-> {
+            tcpSide.flush();
+            return this;
+        });
     }
 
     @Override
     public RestFuture<?, Channel> startTCP() {
         return RestFuture.create(()->{
-            Socket socket = new Socket(address.getAddress(), address.getPort(), InetAddress.getLocalHost(), localPort);
-            tcpSide.connect(socket);
-            localPort = tcpSide.getLocalPort();
-
-            synchronized (tcpLock) {
-                if (tcpFuture != null) {
-                    tcpFuture.cancel(false);
-                }
-
-                tcpFuture = getExecutor().scheduleWithFixedDelay(() -> {
-                    ByteBuffer buffer = tcpSide.getData();
-                    try {
-                        if (tcpSide.newDataAvailable()) {
-                            while (true) {
-                                buffer.markReaderIndex();
-                                PacketEncoderDecoder encoderDecoder = getSide().getNetworkData().getPacketEncoderDecoder();
-                                PacketHandlerContext context = encoderDecoder.decode(getSide().getNetworkData().getPacketRegistryContainer(), buffer, null);
-                                if (context != null) {
-                                    context.packetType = PacketType.TCP;
-                                    context.channel = this;
-                                    context.networkSide = client;
-                                    onPacketReceived(context);
-                                    ((JavaClient) getSide()).getClientListenerHandler().onTCPReceived(context);
-                                } else {
-                                    buffer.resetReaderIndex();
-                                    break;
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
+            synchronized (connectLock) {
+                Socket socket = new Socket(address.getAddress(), address.getPort(), InetAddress.getLocalHost(), localPort);
+                tcpSide.connect(socket);
+                localPort = tcpSide.getLocalPort();
+                synchronized (tcpLock) {
+                    if (tcpFuture != null) {
+                        tcpFuture.cancel(false);
                     }
-                }, 0, 1, TimeUnit.MILLISECONDS);
+
+                    tcpFuture = getExecutor().scheduleWithFixedDelay(() -> {
+                        if(tcpSide.isClosed()) return;
+                        if(tcpSide.newDataAvailable()) {
+                            ByteBuffer buffer = tcpSide.getData();
+                            onTCPBytesReceived(buffer);
+                        }
+                    }, 0, 1, TimeUnit.MILLISECONDS);
+                }
             }
+
+
 
             return this;
         });
@@ -167,7 +129,7 @@ public class JavaClientChannel extends BaseChannel {
             synchronized (tcpLock) {
                 tcpSide.disconnect();
                 if (tcpFuture != null) {
-                    tcpFuture.cancel(false);
+                    tcpFuture.cancel(true);
                 }
                 return this;
             }
@@ -177,32 +139,27 @@ public class JavaClientChannel extends BaseChannel {
     @Override
     public RestFuture<?, Channel> startUDP() {
         return RestFuture.create(()-> {
-            synchronized (udpLock) {
-                if (udpFuture != null) {
-                    udpFuture.cancel(false);
-                }
-                udpFuture = getExecutor().scheduleAtFixedRate(() -> {
-                    DatagramPacket packet = null;
-                    try {
-                        packet = udpSide.receive();
-                    } catch (IOException e) {
-                        e.printStackTrace();
+            synchronized (connectLock){
+                udpSide.connect(localPort);
+                localPort = udpSide.getLocalPort();
+                synchronized (udpLock) {
+                    if (udpFuture != null) {
+                        udpFuture.cancel(true);
                     }
-                    if (packet != null) {
-                        ByteBuffer buffer = bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength());
 
-                        PacketEncoderDecoder encoderDecoder = getSide().getNetworkData().getPacketEncoderDecoder();
-                        PacketHandlerContext context = encoderDecoder.decode(getSide().getNetworkData().getPacketRegistryContainer(), buffer, null);
-                        if (context != null) {
-                            context.packetType = PacketType.UDP;
-                            context.channel = this;
-                            context.networkSide = client;
-                            onPacketReceived(context);
-                            ((JavaClient) getSide()).getClientListenerHandler().onUDPReceived(context);
+                    udpFuture = getExecutor().scheduleAtFixedRate(() -> {
+                        DatagramPacket packet;
+                        try {
+                            packet = udpSide.receive();
+                            onUDPPacketReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                    }
-                }, 0, 1, TimeUnit.MILLISECONDS);
+                    }, 0, 1, TimeUnit.MILLISECONDS);
+                }
             }
+
+
             return this;
         });
     }
@@ -211,6 +168,7 @@ public class JavaClientChannel extends BaseChannel {
     public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()-> {
             synchronized (udpLock) {
+                udpSide.close();
                 if (udpFuture != null) {
                     udpFuture.cancel(false);
                     udpFuture = null;
@@ -226,13 +184,8 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public boolean isTCPClosed() {
-        return tcpSide.isClosed();
-    }
-
-    @Override
     public boolean isUDPOpen() {
-        return udpSide!=null;
+        return udpSide.isConnected();
     }
 
     @Override
