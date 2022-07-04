@@ -147,7 +147,7 @@ public class JavaClientChannel extends BaseChannel {
                         udpFuture.cancel(true);
                     }
 
-                    udpFuture = getExecutor().scheduleAtFixedRate(() -> {
+                    udpFuture = getExecutor().scheduleWithFixedDelay(() -> {
                         DatagramPacket packet;
                         try {
                             packet = udpSide.receive();
