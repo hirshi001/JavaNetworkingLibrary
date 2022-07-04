@@ -247,7 +247,7 @@ public class JavaTest {
             Thread.sleep(1);
         }
 
-        Thread.sleep(1000);
+        Thread.sleep(100);
 
         assertEquals(packetCount, counter.get());
 
@@ -258,6 +258,8 @@ public class JavaTest {
         assertTrue(clientChannelInitialized.get());
         assertEquals(packetCount, clientListenerReceived.get());
         assertEquals(packetCount, clientListenerSent.get());
+
+        Thread.sleep(100);
 
         server.close();
         client.close();
@@ -270,7 +272,7 @@ public class JavaTest {
         String message = "Hello: From client: " + ip.value + ". To client:" + ThreadLocalRandom.current().nextInt(ip.value);
         StringPacket response = new StringPacket(message);
         response.setResponsePacket(ip);
-        context.channel.sendTCP(response, null).perform();
+        context.channel.sendUDP(response, null).perform();
     }
 
     @Test

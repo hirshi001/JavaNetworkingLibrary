@@ -49,7 +49,6 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     protected void sendTCP(byte[] data, int offset, int length) {
-
         tcpSide.writeData(data, offset, length);
     }
 

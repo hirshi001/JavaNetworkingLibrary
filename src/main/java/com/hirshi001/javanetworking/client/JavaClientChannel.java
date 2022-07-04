@@ -151,7 +151,9 @@ public class JavaClientChannel extends BaseChannel {
                         DatagramPacket packet;
                         try {
                             packet = udpSide.receive();
-                            onUDPPacketReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
+                            if(packet!=null){
+                                onUDPPacketReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
+                            }
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -168,11 +170,11 @@ public class JavaClientChannel extends BaseChannel {
     public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()-> {
             synchronized (udpLock) {
-                udpSide.close();
                 if (udpFuture != null) {
                     udpFuture.cancel(false);
                     udpFuture = null;
                 }
+                udpSide.close();
                 return this;
             }
         });
