@@ -264,7 +264,6 @@ public class JavaTest {
         server.close();
         client.close();
 
-
     }
 
     private static void randomIntegerResponse(PacketHandlerContext<IntegerPacket> context){
