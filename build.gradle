@@ -26,7 +26,7 @@ dependencies {
 
     testImplementation 'com.github.hirshi001:betterlogger:abc1763f95'
 
-    api 'com.github.hirshi001:betternetworking:db7a29e554'
+    api 'com.github.hirshi001:betternetworking:a07f28a5ac'
 }
 
 test {
