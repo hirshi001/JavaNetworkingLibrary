@@ -108,7 +108,10 @@ public class JavaClientChannel extends BaseChannel {
                     }
 
                     tcpFuture = getExecutor().scheduleWithFixedDelay(() -> {
-                        if(tcpSide.isClosed()) return;
+                        if(tcpSide.isClosed()){
+                            stopTCP().perform();
+                            return;
+                        }
                         if(tcpSide.newDataAvailable()) {
                             ByteBuffer buffer = tcpSide.getData();
                             onTCPBytesReceived(buffer);
@@ -116,9 +119,6 @@ public class JavaClientChannel extends BaseChannel {
                     }, 0, 1, TimeUnit.MILLISECONDS);
                 }
             }
-
-
-
             return this;
         });
     }
@@ -130,6 +130,9 @@ public class JavaClientChannel extends BaseChannel {
                 tcpSide.disconnect();
                 if (tcpFuture != null) {
                     tcpFuture.cancel(true);
+                }
+                if(isTCPClosed() && isUDPClosed()) {
+                    close().perform();
                 }
                 return this;
             }
@@ -175,6 +178,9 @@ public class JavaClientChannel extends BaseChannel {
                     udpFuture = null;
                 }
                 udpSide.close();
+                if(isTCPClosed() && isUDPClosed()) {
+                    close().perform();
+                }
                 return this;
             }
         });

@@ -7,7 +7,6 @@ import com.hirshi001.networking.network.channel.BaseChannel;
 import com.hirshi001.networking.network.channel.Channel;
 import com.hirshi001.restapi.RestFuture;
 
-import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -35,7 +34,10 @@ public class JavaServerChannel extends BaseChannel {
     public void connect(Socket socket){
         tcpSide.connect(socket);
         future = getExecutor().scheduleWithFixedDelay(()->{
-            if(tcpSide.isClosed()) return;
+            if(tcpSide.isClosed()){
+                stopTCP().perform();
+                return;
+            }
             if(tcpSide.newDataAvailable()){
                 ByteBuffer buffer = tcpSide.getData();
                 onTCPBytesReceived(buffer);
@@ -85,6 +87,9 @@ public class JavaServerChannel extends BaseChannel {
             if(future!=null){
                 future.cancel(true);
             }
+            if(isUDPClosed() && isTCPClosed()){
+                close().perform();
+            }
             return this;
         });
     }
@@ -101,6 +106,9 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()->{
             udpClosed.set(true);
+            if(isUDPClosed() && isTCPClosed()){
+                close().perform();
+            }
             return this;
         });
     }

@@ -19,7 +19,7 @@ public class TCPSocket {
 
     int lastSize;
 
-    public TCPSocket(BufferFactory factory){
+    public TCPSocket(BufferFactory factory) {
         this.buffer = factory.circularBuffer(64);
         this.options = new ConcurrentHashMap<>();
         lastSize = buffer.size();
