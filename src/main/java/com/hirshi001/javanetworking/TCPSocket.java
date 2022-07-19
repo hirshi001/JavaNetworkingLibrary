@@ -33,9 +33,11 @@ public class TCPSocket {
 
     public void disconnect(){
         try {
-            buffer.clear();
-            socket.close();
-            socket = null;
+            if(buffer!=null) buffer.clear();
+            if(socket!=null) {
+                socket.close();
+                socket = null;
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

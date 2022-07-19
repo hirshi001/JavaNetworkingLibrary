@@ -16,6 +16,7 @@ import com.hirshi001.networking.packet.PacketHolder;
 import com.hirshi001.networking.packetdecoderencoder.PacketEncoderDecoder;
 import com.hirshi001.networking.packetdecoderencoder.SimplePacketEncoderDecoder;
 import com.hirshi001.networking.packethandlercontext.PacketHandlerContext;
+import com.hirshi001.networking.packethandlercontext.PacketType;
 import com.hirshi001.networking.packetregistrycontainer.MultiPacketRegistryContainer;
 import com.hirshi001.networking.packetregistrycontainer.PacketRegistryContainer;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.IntegerPacket;
@@ -107,7 +108,6 @@ public class JavaTest {
         server.startTCP().perform().get();
 
 
-
         clientPacketRegistryContainer.getDefaultRegistry().
                 registerDefaultPrimitivePackets().
                 register(new PacketHolder<>(IntegerPacket::new, null , IntegerPacket.class), 0);
@@ -143,7 +143,7 @@ public class JavaTest {
                     perform();
 
         }
-        Thread.sleep(100);
+        Thread.sleep(1000);
 
         assertTrue(serverChannelInitialized.get());
         assertEquals(packetCount, serverListenerReceived.get());
@@ -271,7 +271,11 @@ public class JavaTest {
         String message = "Hello: From client: " + ip.value + ". To client:" + ThreadLocalRandom.current().nextInt(ip.value);
         StringPacket response = new StringPacket(message);
         response.setResponsePacket(ip);
-        context.channel.sendUDP(response, null).perform();
+        if(context.packetType == PacketType.UDP) {
+            context.channel.sendUDP(response, null).perform();
+        } else {
+            context.channel.sendTCP(response, null).perform();
+        }
     }
 
     @Test

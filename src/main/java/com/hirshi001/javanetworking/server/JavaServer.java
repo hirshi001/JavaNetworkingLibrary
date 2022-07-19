@@ -57,10 +57,12 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                     if(channel.getPacketTimeout() > 0 && now-channel.lastReceived > channel.getPacketTimeout()){
                         iterator.remove();
                         channel.close().perform();
+                        System.out.println("Packet timeout");
                         continue;
                     }
                     if (channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0 && now - channel.lastTCPReceived > channel.getTCPPacketTimeout()) {
                         channel.stopTCP().perform();
+                        System.out.println("TCP timeout");
                     }
                     if(channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0 && now-channel.lastUDPReceived > channel.getUDPPacketTimeout()){
                         channel.stopUDP().perform();
@@ -68,7 +70,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
                 }
             }
-        }, 0, 100, TimeUnit.MILLISECONDS);
+        }, 0, 1, TimeUnit.MILLISECONDS);
     }
 
     @Override

@@ -126,7 +126,9 @@ public class JavaClientChannel extends BaseChannel {
     @Override
     public RestFuture<?, Channel> stopTCP() {
         return RestFuture.create(()->{
+
             synchronized (tcpLock) {
+                if(isTCPClosed()) return this;
                 tcpSide.disconnect();
                 if (tcpFuture != null) {
                     tcpFuture.cancel(true);
@@ -173,6 +175,7 @@ public class JavaClientChannel extends BaseChannel {
     public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()-> {
             synchronized (udpLock) {
+                if(isUDPClosed()) return this;
                 if (udpFuture != null) {
                     udpFuture.cancel(false);
                     udpFuture = null;

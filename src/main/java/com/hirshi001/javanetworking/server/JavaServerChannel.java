@@ -10,6 +10,7 @@ import com.hirshi001.restapi.RestFuture;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -41,6 +42,7 @@ public class JavaServerChannel extends BaseChannel {
     public boolean checkNewTCPData(){
         if(tcpSide.newDataAvailable()){
             ByteBuffer buffer = tcpSide.getData();
+            System.out.println(buffer.readableBytes() + " : " + Arrays.toString(buffer.array()));
             onTCPBytesReceived(buffer);
             return true;
         }
@@ -97,6 +99,7 @@ public class JavaServerChannel extends BaseChannel {
     @Override
     public RestFuture<?, Channel> stopTCP() {
         return RestFuture.create(()->{
+            if(tcpSide.isClosed()) return this;
             tcpSide.disconnect();
             if(isUDPClosed() && isTCPClosed()){
                 close().perform();
@@ -117,6 +120,7 @@ public class JavaServerChannel extends BaseChannel {
     @Override
     public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()->{
+            if(isUDPClosed()) return this;
             udpClosed.set(true);
             if(isUDPClosed() && isTCPClosed()){
                 close().perform();
