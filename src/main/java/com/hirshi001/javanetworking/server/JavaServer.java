@@ -137,6 +137,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                                 if (channel == null) {
                                     channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
                                     if (!addChannel(channel))return;
+                                    channel.startUDP().perform();
                                 };
                             }
                             channel.udpPacketReceived(packet.getData(), packet.getLength());
