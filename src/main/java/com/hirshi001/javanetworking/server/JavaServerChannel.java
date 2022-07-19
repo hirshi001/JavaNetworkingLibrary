@@ -22,9 +22,11 @@ public class JavaServerChannel extends BaseChannel {
     private final InetSocketAddress address;
     private final BufferFactory bufferFactory;
 
-    public long lastTCPReceived = -1;
-    public long lastUDPReceived = -1;
-    public long lastReceived = -1;
+    public long lastTCPReceived = 0;
+    public boolean lastTCPReceivedValid = false;
+    public long lastUDPReceived = 0;
+    public boolean lastUDPReceivedValid = false;
+    public long lastReceived = 0;
 
 
     public JavaServerChannel(ScheduledExecutorService executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory){
@@ -36,6 +38,7 @@ public class JavaServerChannel extends BaseChannel {
 
     public void connect(Socket socket){
         tcpSide.connect(socket);
+        lastTCPReceivedValid = true;
         lastTCPReceived = lastReceived = System.nanoTime();
     }
 
@@ -99,6 +102,7 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> stopTCP() {
         return RestFuture.create(()->{
             if(tcpSide.isClosed()) return this;
+            lastTCPReceivedValid = false;
             tcpSide.disconnect();
             return this;
         });
@@ -108,6 +112,7 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> startUDP() {
         return RestFuture.create(()->{
             udpClosed.set(false);
+            lastUDPReceivedValid = true;
             lastUDPReceived = lastReceived = System.nanoTime();
             return this;
         });
@@ -117,6 +122,7 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> stopUDP() {
         return RestFuture.create(()->{
             if(isUDPClosed()) return this;
+            lastUDPReceivedValid = false;
             udpClosed.set(true);
             return this;
         });

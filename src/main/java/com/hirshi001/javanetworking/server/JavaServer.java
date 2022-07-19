@@ -54,15 +54,18 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                         channel.lastTCPReceived = now;
                         channel.lastReceived = now;
                     }
-                    if(channel.getPacketTimeout() > 0 && now-channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())){
+                    if((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
+                            && now-channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())){
                         iterator.remove();
                         channel.close().perform();
                         continue;
                     }
-                    if (channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0 && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
+                    if (channel.lastTCPReceivedValid && channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0
+                            && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
                         channel.stopTCP().perform();
                     }
-                    if(channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0 && now-channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())){
+                    if(channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
+                            && now-channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())){
                         channel.stopUDP().perform();
                     }
 
