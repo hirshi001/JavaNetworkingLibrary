@@ -54,17 +54,15 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                         channel.lastTCPReceived = now;
                         channel.lastReceived = now;
                     }
-                    if(channel.getPacketTimeout() > 0 && now-channel.lastReceived > channel.getPacketTimeout()){
+                    if(channel.getPacketTimeout() > 0 && now-channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())){
                         iterator.remove();
                         channel.close().perform();
-                        System.out.println("Packet timeout");
                         continue;
                     }
-                    if (channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0 && now - channel.lastTCPReceived > channel.getTCPPacketTimeout()) {
+                    if (channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0 && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
                         channel.stopTCP().perform();
-                        System.out.println("TCP timeout");
                     }
-                    if(channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0 && now-channel.lastUDPReceived > channel.getUDPPacketTimeout()){
+                    if(channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0 && now-channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())){
                         channel.stopUDP().perform();
                     }
 
@@ -135,7 +133,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                                 channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
                                 if (channel == null) {
                                     channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
-                                    if (!addChannel(channel)) return;
+                                    if (!addChannel(channel))return;
                                 };
                             }
                             channel.udpPacketReceived(packet.getData(), packet.getLength());

@@ -76,6 +76,8 @@ public class JavaTest {
         AtomicBoolean serverChannelInitialized = new AtomicBoolean(false);
         AtomicInteger serverListenerReceived = new AtomicInteger(0);
         AtomicInteger serverListenerSent = new AtomicInteger(0);
+        AtomicBoolean clientConnectListener = new AtomicBoolean(false);
+        AtomicBoolean clientDisconnectListener = new AtomicBoolean(false);
 
         AtomicBoolean clientChannelInitialized = new AtomicBoolean(false);
         AtomicInteger clientListenerReceived = new AtomicInteger(0);
@@ -95,14 +97,28 @@ public class JavaTest {
                 serverChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.TCP_KEEP_ALIVE, true);
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, (int)TimeUnit.SECONDS.toMillis(2));
             }
         });
         server.addServerListener(new AbstractServerListener(){
+            @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 serverListenerReceived.incrementAndGet();
             }
+
+            @Override
             public void onSent(PacketHandlerContext<?> context) {
                 serverListenerSent.incrementAndGet();
+            }
+
+            @Override
+            public void onClientConnect(Server server, Channel channel){
+                clientConnectListener.set(true);
+            }
+
+            @Override
+            public void onClientDisconnect(Server server, Channel clientChannel) {
+                clientDisconnectListener.set(true);
             }
         });
         server.startTCP().perform().get();
@@ -148,6 +164,7 @@ public class JavaTest {
         assertTrue(serverChannelInitialized.get());
         assertEquals(packetCount, serverListenerReceived.get());
         assertEquals(packetCount, serverListenerSent.get());
+        assertTrue(clientConnectListener.get());
 
         assertTrue(clientChannelInitialized.get());
         assertEquals(packetCount, clientListenerReceived.get());
@@ -155,6 +172,9 @@ public class JavaTest {
 
         assertEquals(packetCount, counter.get());
 
+        Thread.sleep(TimeUnit.SECONDS.toMillis(3));
+
+        assertTrue(clientDisconnectListener.get());
 
         client.close();
 
@@ -182,6 +202,8 @@ public class JavaTest {
         AtomicBoolean serverChannelInitialized = new AtomicBoolean(false);
         AtomicInteger serverListenerReceived = new AtomicInteger(0);
         AtomicInteger serverListenerSent = new AtomicInteger(0);
+        AtomicBoolean clientConnectListener = new AtomicBoolean(false);
+        AtomicBoolean clientDisconnectListener = new AtomicBoolean(false);
 
         AtomicBoolean clientChannelInitialized = new AtomicBoolean(false);
         AtomicInteger clientListenerReceived = new AtomicInteger(0);
@@ -202,12 +224,22 @@ public class JavaTest {
             public void onSent(PacketHandlerContext<?> context) {
                 serverListenerSent.incrementAndGet();
             }
+            @Override
+            public void onClientConnect(Server server, Channel channel){
+                clientConnectListener.set(true);
+            }
+
+            @Override
+            public void onClientDisconnect(Server server, Channel clientChannel) {
+                clientDisconnectListener.set(true);
+            }
         });
         server.setChannelInitializer(new ChannelInitializer() {
             @Override
             public void initChannel(Channel channel) {
                 serverChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, (int)TimeUnit.SECONDS.toMillis(2));
             }
         });
         server.startUDP().perform().get();
@@ -228,6 +260,7 @@ public class JavaTest {
             public void onSent(PacketHandlerContext<?> context) {
                 clientListenerSent.incrementAndGet();
             }
+
         });
         client.setChannelInitializer(new ChannelInitializer() {
             @Override
@@ -254,12 +287,15 @@ public class JavaTest {
         assertTrue(serverChannelInitialized.get());
         assertEquals(packetCount, serverListenerReceived.get());
         assertEquals(packetCount, serverListenerSent.get());
+        assertTrue(clientConnectListener.get());
 
         assertTrue(clientChannelInitialized.get());
         assertEquals(packetCount, clientListenerReceived.get());
         assertEquals(packetCount, clientListenerSent.get());
 
-        Thread.sleep(100);
+        Thread.sleep(TimeUnit.SECONDS.toMillis(3));
+
+        assertTrue(clientDisconnectListener.get());
 
         server.close();
         client.close();

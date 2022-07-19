@@ -42,7 +42,6 @@ public class JavaServerChannel extends BaseChannel {
     public boolean checkNewTCPData(){
         if(tcpSide.newDataAvailable()){
             ByteBuffer buffer = tcpSide.getData();
-            System.out.println(buffer.readableBytes() + " : " + Arrays.toString(buffer.array()));
             onTCPBytesReceived(buffer);
             return true;
         }
