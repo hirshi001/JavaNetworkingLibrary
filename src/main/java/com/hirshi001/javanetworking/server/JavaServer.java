@@ -13,6 +13,9 @@ import com.hirshi001.restapi.RestFuture;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.channels.*;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,6 +43,32 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         tcpServer = new TCPServer(getPort());
         this.udpSide = new UDPSocket();
         udpSide.connect(getPort());
+
+        executor.scheduleWithFixedDelay(()->{
+            synchronized (getClients().getLock()) {
+                long now = System.nanoTime();
+                Iterator<JavaServerChannel> iterator = getClients().iterator();
+                while (iterator.hasNext()) {
+                    JavaServerChannel channel = iterator.next();
+                    if(channel.isTCPOpen() && channel.checkNewTCPData()){
+                        channel.lastTCPReceived = now;
+                        channel.lastReceived = now;
+                    }
+                    if(channel.getPacketTimeout() > 0 && now-channel.lastReceived > channel.getPacketTimeout()){
+                        iterator.remove();
+                        channel.close().perform();
+                        continue;
+                    }
+                    if (channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0 && now - channel.lastTCPReceived > channel.getTCPPacketTimeout()) {
+                        channel.stopTCP().perform();
+                    }
+                    if(channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0 && now-channel.lastUDPReceived > channel.getUDPPacketTimeout()){
+                        channel.stopUDP().perform();
+                    }
+
+                }
+            }
+        }, 0, 100, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -79,10 +108,6 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
             }
             return this;
         });
-    }
-    
-    public ServerListener getServerListenerHandler(){
-        return serverListenerHandler;
     }
 
     public UDPSocket getUDPSide(){

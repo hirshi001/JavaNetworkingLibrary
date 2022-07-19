@@ -11,8 +11,6 @@ import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class JavaServerChannel extends BaseChannel {
@@ -22,7 +20,10 @@ public class JavaServerChannel extends BaseChannel {
     final AtomicBoolean udpClosed = new AtomicBoolean(false);
     private final InetSocketAddress address;
     private final BufferFactory bufferFactory;
-    ScheduledFuture<?> future;
+
+    public long lastTCPReceived = -1;
+    public long lastUDPReceived = -1;
+    public long lastReceived = -1;
 
 
     public JavaServerChannel(ScheduledExecutorService executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory){
@@ -31,22 +32,35 @@ public class JavaServerChannel extends BaseChannel {
         this.tcpSide = new TCPSocket(bufferFactory);
         this.bufferFactory = bufferFactory;
     }
+
     public void connect(Socket socket){
         tcpSide.connect(socket);
-        future = getExecutor().scheduleWithFixedDelay(()->{
-            if(tcpSide.isClosed()){
-                stopTCP().perform();
-                return;
-            }
-            if(tcpSide.newDataAvailable()){
-                ByteBuffer buffer = tcpSide.getData();
-                onTCPBytesReceived(buffer);
-            }
-        }, 0, 1, TimeUnit.MILLISECONDS);
+        lastTCPReceived = lastReceived = System.nanoTime();
+    }
+
+    public boolean checkNewTCPData(){
+        if(tcpSide.newDataAvailable()){
+            ByteBuffer buffer = tcpSide.getData();
+            onTCPBytesReceived(buffer);
+            return true;
+        }
+        return false;
     }
 
     public void udpPacketReceived(byte[] bytes, int length){
         onUDPPacketReceived(bufferFactory.wrap(bytes, 0, length));
+    }
+
+    public int getUDPPacketTimeout(){
+        return udpPacketTimeout;
+    }
+
+    public int getTCPPacketTimeout(){
+        return tcpPacketTimeout;
+    }
+
+    public int getPacketTimeout(){
+        return packetTimeout;
     }
 
     @Override
@@ -84,9 +98,6 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> stopTCP() {
         return RestFuture.create(()->{
             tcpSide.disconnect();
-            if(future!=null){
-                future.cancel(true);
-            }
             if(isUDPClosed() && isTCPClosed()){
                 close().perform();
             }
@@ -98,6 +109,7 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> startUDP() {
         return RestFuture.create(()->{
             udpClosed.set(false);
+            lastUDPReceived = lastReceived = System.nanoTime();
             return this;
         });
     }
