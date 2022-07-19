@@ -33,8 +33,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class JavaTest {
 
@@ -159,7 +158,14 @@ public class JavaTest {
                     perform();
 
         }
-        Thread.sleep(1000);
+
+
+        for(int i=0;i<15;i++){
+            Thread.sleep(100);
+            assertFalse(clientDisconnectListener.get(), "Client disconnected at i="+i);
+        }
+        Thread.sleep(1500);
+        assertTrue(clientDisconnectListener.get());
 
         assertTrue(serverChannelInitialized.get());
         assertEquals(packetCount, serverListenerReceived.get());
@@ -172,9 +178,7 @@ public class JavaTest {
 
         assertEquals(packetCount, counter.get());
 
-        Thread.sleep(TimeUnit.SECONDS.toMillis(3));
 
-        assertTrue(clientDisconnectListener.get());
 
         client.close();
 
@@ -202,8 +206,8 @@ public class JavaTest {
         AtomicBoolean serverChannelInitialized = new AtomicBoolean(false);
         AtomicInteger serverListenerReceived = new AtomicInteger(0);
         AtomicInteger serverListenerSent = new AtomicInteger(0);
-        AtomicBoolean clientConnectListener = new AtomicBoolean(false);
-        AtomicBoolean clientDisconnectListener = new AtomicBoolean(false);
+        AtomicInteger clientConnectListener = new AtomicInteger(0);
+        AtomicInteger clientDisconnectListener = new AtomicInteger(0);
 
         AtomicBoolean clientChannelInitialized = new AtomicBoolean(false);
         AtomicInteger clientListenerReceived = new AtomicInteger(0);
@@ -226,12 +230,12 @@ public class JavaTest {
             }
             @Override
             public void onClientConnect(Server server, Channel channel){
-                clientConnectListener.set(true);
+                clientConnectListener.getAndIncrement();
             }
 
             @Override
             public void onClientDisconnect(Server server, Channel clientChannel) {
-                clientDisconnectListener.set(true);
+                clientDisconnectListener.getAndIncrement();
             }
         });
         server.setChannelInitializer(new ChannelInitializer() {
@@ -277,25 +281,27 @@ public class JavaTest {
             client.sendUDPWithResponse(new IntegerPacket(i+1), null, 1000).
                     then((context) -> counter.incrementAndGet()).
                     perform();
-            Thread.sleep(1);
         }
 
-        Thread.sleep(100);
+        for(int i=0;i<15;i++){
+            Thread.sleep(100);
+            assertEquals(0, clientDisconnectListener.get(), "Client disconnected at i="+i);
+        }
+        Thread.sleep(1500);
+        assertEquals(1, clientDisconnectListener.get());
+
 
         assertEquals(packetCount, counter.get());
 
         assertTrue(serverChannelInitialized.get());
         assertEquals(packetCount, serverListenerReceived.get());
         assertEquals(packetCount, serverListenerSent.get());
-        assertTrue(clientConnectListener.get());
+        assertEquals(1, clientConnectListener.get());
 
         assertTrue(clientChannelInitialized.get());
         assertEquals(packetCount, clientListenerReceived.get());
         assertEquals(packetCount, clientListenerSent.get());
 
-        Thread.sleep(TimeUnit.SECONDS.toMillis(3));
-
-        assertTrue(clientDisconnectListener.get());
 
         server.close();
         client.close();

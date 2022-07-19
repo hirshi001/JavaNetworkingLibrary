@@ -100,9 +100,6 @@ public class JavaServerChannel extends BaseChannel {
         return RestFuture.create(()->{
             if(tcpSide.isClosed()) return this;
             tcpSide.disconnect();
-            if(isUDPClosed() && isTCPClosed()){
-                close().perform();
-            }
             return this;
         });
     }
@@ -121,9 +118,6 @@ public class JavaServerChannel extends BaseChannel {
         return RestFuture.create(()->{
             if(isUDPClosed()) return this;
             udpClosed.set(true);
-            if(isUDPClosed() && isTCPClosed()){
-                close().perform();
-            }
             return this;
         });
     }
