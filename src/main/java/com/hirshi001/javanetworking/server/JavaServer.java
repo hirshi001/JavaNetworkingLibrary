@@ -93,15 +93,15 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                                 channel = channelSet.get(address.getAddress().getAddress(), port);
                                 if(channel==null){
                                     channel = new JavaServerChannel(executor, this, address, getBufferFactory());
+                                    channel.connect(socket);
                                     if(!addChannel(channel)){
                                         try {
                                             socket.close();
                                         } catch (IOException e) {e.printStackTrace();}
                                         return;
                                     }
-                                }
+                                }else channel.connect(socket);
                             }
-                            channel.connect(socket);
                         });
                         isTCPClosed.set(false);
                     } catch (IOException e) {
