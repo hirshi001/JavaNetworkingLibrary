@@ -65,8 +65,7 @@ public class JavaClient extends BaseClient {
             if(!channel.supportsTCP()){
                 future.setCause(new UnsupportedOperationException("TCP is not supported on this client"));
             }else{
-                channel.startTCP().perform();
-                future.taskFinished(this);
+                channel.startTCP().then(n-> future.taskFinished(JavaClient.this)).perform();
             }
         });
     }
@@ -78,8 +77,7 @@ public class JavaClient extends BaseClient {
             if(!channel.supportsUDP()){
                 future.setCause(new UnsupportedOperationException("UDP is not supported on this client"));
             }else{
-                channel.startUDP().perform();
-                future.taskFinished(this);
+                channel.startUDP().then(n->future.taskFinished(JavaClient.this)).perform();
             }
         });
     }
