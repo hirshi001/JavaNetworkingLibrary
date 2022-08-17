@@ -154,13 +154,14 @@ public class JavaClientChannel extends BaseChannel {
 
                     udpFuture = getExecutor().scheduleWithFixedDelay(() -> {
                         DatagramPacket packet;
-                        try {
-                            packet = udpSide.receive();
-                            if(packet!=null){
+                        while(true){
+                            try {
+                                packet = udpSide.receive();
+                                if(packet==null) return;
                                 onUDPPacketReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
+                            } catch (IOException e) {
+                                break;
                             }
-                        } catch (IOException e) {
-                            e.printStackTrace();
                         }
                     }, 0, 1, TimeUnit.MILLISECONDS);
                 }

@@ -51,7 +51,9 @@ public class JavaServerChannel extends BaseChannel {
         return false;
     }
 
-    public void udpPacketReceived(byte[] bytes, int length){
+    public void udpPacketReceived(byte[] bytes, int length, long time){
+        lastUDPReceived = time;
+        lastReceived = time;
         onUDPPacketReceived(bufferFactory.wrap(bytes, 0, length));
     }
 

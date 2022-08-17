@@ -126,24 +126,26 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                     udpServerFuture = null;
                 }
                 udpServerFuture = executor.scheduleWithFixedDelay(()->{
-                    try {
-                        DatagramPacket packet = udpSide.receive();
-                        if(packet != null) {
-
+                    long now = System.nanoTime();
+                    while(true) {
+                        try {
+                            DatagramPacket packet = udpSide.receive();
+                            if(packet==null) break;
                             DefaultChannelSet<JavaServerChannel> channelSet = getClients();
                             JavaServerChannel channel;
                             synchronized (channelSet.getLock()) {
                                 channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
                                 if (channel == null) {
                                     channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
-                                    if (!addChannel(channel))return;
+                                    if (!addChannel(channel)) return;
                                     channel.startUDP().perform();
-                                };
+                                }
                             }
-                            channel.udpPacketReceived(packet.getData(), packet.getLength());
+                            channel.udpPacketReceived(packet.getData(), packet.getLength(), now);
+
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                    } catch (IOException e) {
-                        e.printStackTrace();
                     }
                 }, 0, 1, TimeUnit.MILLISECONDS);
                 isUDPClosed.set(false);
