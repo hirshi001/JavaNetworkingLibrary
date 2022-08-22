@@ -12,6 +12,7 @@ import com.hirshi001.networking.network.server.AbstractServerListener;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.networkdata.DefaultNetworkData;
 import com.hirshi001.networking.networkdata.NetworkData;
+import com.hirshi001.networking.packet.PacketHandler;
 import com.hirshi001.networking.packet.PacketHolder;
 import com.hirshi001.networking.packetdecoderencoder.PacketEncoderDecoder;
 import com.hirshi001.networking.packetdecoderencoder.SimplePacketEncoderDecoder;
@@ -19,6 +20,10 @@ import com.hirshi001.networking.packethandlercontext.PacketHandlerContext;
 import com.hirshi001.networking.packethandlercontext.PacketType;
 import com.hirshi001.networking.packetregistrycontainer.MultiPacketRegistryContainer;
 import com.hirshi001.networking.packetregistrycontainer.PacketRegistryContainer;
+import com.hirshi001.networking.util.defaultpackets.arraypackets.ByteArrayPacket;
+import com.hirshi001.networking.util.defaultpackets.arraypackets.CharArrayPacket;
+import com.hirshi001.networking.util.defaultpackets.arraypackets.DoubleArrayPacket;
+import com.hirshi001.networking.util.defaultpackets.arraypackets.IntegerArrayPacket;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.IntegerPacket;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.StringPacket;
 import logger.Logger;
@@ -55,7 +60,7 @@ public class JavaTest {
         bufferFactory = new DefaultBufferFactory();
         bufferFactory.defaultOrder(ByteOrder.BIG_ENDIAN);
 
-        packetEncoderDecoder = new SimplePacketEncoderDecoder();
+        packetEncoderDecoder = new SimplePacketEncoderDecoder(Integer.MAX_VALUE);
         executor = Executors.newScheduledThreadPool(3);
         networkFactory = new JavaNetworkFactory(executor);
 
@@ -338,6 +343,62 @@ public class JavaTest {
         clientSocket2.close();
         serverSocket2.close();
         ss2.close();
+    }
+
+    @Test
+    public void sendManyBytesTest() throws IOException, ExecutionException, InterruptedException {
+        AtomicBoolean received = new AtomicBoolean(false);
+        serverPacketRegistryContainer.getDefaultRegistry()
+                .registerDefaultArrayPrimitivePackets()
+                .register(IntegerArrayPacket::new, null, IntegerArrayPacket.class, 0);
+
+        server = networkFactory.createServer(serverNetworkData, bufferFactory, 1234);
+        server.setChannelInitializer(new ChannelInitializer() {
+            @Override
+            public void initChannel(Channel channel) {
+                channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+            }
+        });
+
+        server.addServerListener(new AbstractServerListener(){
+            @Override
+            public void onClientConnect(Server server, Channel clientChannel) {
+                int[] ints = new int[100000];
+                for(int i=0;i<ints.length;i++){
+                    ints[i] = i;
+                }
+                clientChannel.sendTCP(new IntegerArrayPacket(ints), null).perform();
+            }
+        });
+
+        server.startTCP().perform().get();
+
+        clientPacketRegistryContainer.getDefaultRegistry().
+                registerDefaultArrayPrimitivePackets().
+                register(IntegerArrayPacket::new, new PacketHandler<IntegerArrayPacket>() {
+                    @Override
+                    public void handle(PacketHandlerContext<IntegerArrayPacket> context) {
+                        received.set(true);
+                        System.out.println(context.packet);
+                    }
+                }, IntegerArrayPacket.class, 0);
+
+        client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
+        client.setChannelInitializer(channel -> {
+            channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+        });
+        client.addClientListener(new AbstractChannelListener(){
+            @Override
+            public void onReceived(PacketHandlerContext<?> context) {
+                received.set(true);
+            }
+        });
+
+
+        client.startTCP().perform().get();
+        Thread.sleep(5000);
+
+        assertTrue(received.get());
     }
 
 }

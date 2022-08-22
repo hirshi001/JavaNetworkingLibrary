@@ -1,6 +1,7 @@
 package com.hirshi001.javanetworking.server;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
+import com.hirshi001.javanetworking.TCPSocket;
 import com.hirshi001.javanetworking.UDPSocket;
 import com.hirshi001.networking.network.channel.DefaultChannelSet;
 import com.hirshi001.networking.network.server.BaseServer;
