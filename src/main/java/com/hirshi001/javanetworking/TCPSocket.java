@@ -25,16 +25,16 @@ public class TCPSocket {
         lastSize = buffer.size();
     }
 
-    public void connect(Socket socket){
+    public void connect(Socket socket) {
         buffer.clear();
         this.socket = socket;
         setOptions();
     }
 
-    public void disconnect(){
+    public void disconnect() {
         try {
-            if(buffer!=null) buffer.clear();
-            if(socket!=null) {
+            if (buffer != null) buffer.clear();
+            if (socket != null) {
                 socket.close();
                 socket = null;
             }
@@ -43,39 +43,41 @@ public class TCPSocket {
         }
     }
 
-    public boolean isConnected(){
+    public boolean isConnected() {
         return socket != null && socket.isConnected() && !socket.isClosed();
     }
 
-    public boolean isClosed(){
-        return socket==null || socket.isClosed();
+    public boolean isClosed() {
+        return socket == null || socket.isClosed();
     }
 
-    public boolean newDataAvailable(){
-        if(!isConnected()) return false;
+    public boolean newDataAvailable() {
+        if (!isConnected()) return false;
 
-        try{
+        try {
             InputStream in = socket.getInputStream();
 
             int available = in.available();
-            if(available > 0){
+            if (available > 0) {
                 buffer.ensureWritable(available);
-                for(int i = 0; i < available; i++){
+                for (int i = 0; i < available; i++) {
                     buffer.writeByte(in.read());
                 }
                 return true;
             }
 
-        } catch (Exception exception) {exception.printStackTrace();}
+        } catch (Exception exception) {
+            exception.printStackTrace();
+        }
         return false;
 
     }
 
-    public ByteBuffer getData(){
+    public ByteBuffer getData() {
         return buffer;
     }
 
-    public void writeData(byte[] data, int offset, int length){
+    public void writeData(byte[] data, int offset, int length) {
         try {
             OutputStream outputStream = socket.getOutputStream();
             outputStream.write(data, offset, length);
@@ -84,8 +86,8 @@ public class TCPSocket {
         }
     }
 
-    public void flush(){
-        if(!isConnected()) return;
+    public void flush() {
+        if (!isConnected()) return;
         try {
             socket.getOutputStream().flush();
         } catch (IOException e) {
@@ -93,15 +95,15 @@ public class TCPSocket {
         }
     }
 
-    private void setOptions(){
-        for(Map.Entry<ChannelOption, Object> entry : options.entrySet()){
+    private void setOptions() {
+        for (Map.Entry<ChannelOption, Object> entry : options.entrySet()) {
             setOption(entry.getKey(), entry.getValue());
         }
     }
 
-    public <T> void setOption(ChannelOption<T> option, T value){
+    public <T> void setOption(ChannelOption<T> option, T value) {
         options.put(option, value);
-        if(isConnected() && JavaOptionMap.SOCKET_OPTION_MAP.containsKey(option)){
+        if (isConnected() && JavaOptionMap.SOCKET_OPTION_MAP.containsKey(option)) {
             try {
                 JavaOptionMap.SOCKET_OPTION_MAP.get(option).accept(socket, value);
             } catch (Exception e) {
@@ -110,12 +112,12 @@ public class TCPSocket {
         }
     }
 
-    public <T> T getOption(ChannelOption<T> option){
+    public <T> T getOption(ChannelOption<T> option) {
         return (T) options.get(option);
     }
 
-    public int getLocalPort(){
-        if(socket==null) return -1;
+    public int getLocalPort() {
+        if (socket == null) return -1;
         return socket.getLocalPort();
     }
 

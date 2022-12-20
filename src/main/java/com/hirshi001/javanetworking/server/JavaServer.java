@@ -1,12 +1,11 @@
 package com.hirshi001.javanetworking.server;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
-import com.hirshi001.javanetworking.TCPSocket;
 import com.hirshi001.javanetworking.UDPSocket;
+import com.hirshi001.networking.network.channel.Channel;
 import com.hirshi001.networking.network.channel.DefaultChannelSet;
 import com.hirshi001.networking.network.server.BaseServer;
 import com.hirshi001.networking.network.server.Server;
-import com.hirshi001.networking.network.server.ServerListener;
 import com.hirshi001.networking.network.server.ServerOption;
 import com.hirshi001.networking.networkdata.NetworkData;
 import com.hirshi001.restapi.RestFuture;
@@ -14,8 +13,6 @@ import com.hirshi001.restapi.RestFuture;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.nio.channels.*;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -41,22 +38,22 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         super(networkData, bufferFactory, port);
         this.executor = scheduledExecutorService;
 
-        tcpServer = new TCPServer(getPort());
+        this.tcpServer = new TCPServer(getPort());
         this.udpSide = new UDPSocket();
         udpSide.connect(getPort());
 
-        executor.scheduleWithFixedDelay(()->{
+        executor.scheduleWithFixedDelay(() -> {
             synchronized (getClients().getLock()) {
                 long now = System.nanoTime();
-                Iterator<JavaServerChannel> iterator = getClients().iterator();
+                Iterator<Channel> iterator = getClients().iterator();
                 while (iterator.hasNext()) {
-                    JavaServerChannel channel = iterator.next();
-                    if(channel.isTCPOpen() && channel.checkNewTCPData()){
+                    JavaServerChannel channel = (JavaServerChannel) iterator.next();
+                    if (channel.isTCPOpen() && channel.checkNewTCPData()) {
                         channel.lastTCPReceived = now;
                         channel.lastReceived = now;
                     }
-                    if((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
-                            && now-channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())){
+                    if ((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
+                            && now - channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())) {
                         iterator.remove();
                         channel.close().perform();
                         continue;
@@ -65,8 +62,8 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                             && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
                         channel.stopTCP().perform();
                     }
-                    if(channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
-                            && now-channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())){
+                    if (channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
+                            && now - channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())) {
                         channel.stopUDP().perform();
                     }
 
@@ -77,31 +74,33 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public RestFuture<?, Server> startTCP() {
-        return RestFuture.create(()->{
+        return RestFuture.create(() -> {
             synchronized (tcpLock) {
-                if(tcpServerFuture != null) {
+                if (tcpServerFuture != null) {
                     tcpServerFuture.cancel(false);
                 }
-                tcpServerFuture = executor.submit(()->{
+                tcpServerFuture = executor.submit(() -> {
                     try {
-                        tcpServer.start((socket)->{
+                        tcpServer.start((socket) -> {
                             int port = socket.getPort();
                             InetSocketAddress address = (InetSocketAddress) socket.getRemoteSocketAddress();
 
-                            DefaultChannelSet<JavaServerChannel> channelSet = getClients();
+                            DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
                             JavaServerChannel channel;
-                            synchronized (channelSet.getLock()){
+                            synchronized (channelSet.getLock()) {
                                 channel = channelSet.get(address.getAddress().getAddress(), port);
-                                if(channel==null){
+                                if (channel == null) {
                                     channel = new JavaServerChannel(executor, this, address, getBufferFactory());
                                     channel.connect(socket);
-                                    if(!addChannel(channel)){
+                                    if (!addChannel(channel)) {
                                         try {
                                             socket.close();
-                                        } catch (IOException e) {e.printStackTrace();}
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        }
                                         return;
                                     }
-                                }else channel.connect(socket);
+                                } else channel.connect(socket);
                             }
                         });
                         isTCPClosed.set(false);
@@ -114,25 +113,25 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         });
     }
 
-    public UDPSocket getUDPSide(){
+    public UDPSocket getUDPSide() {
         return udpSide;
     }
 
     @Override
     public RestFuture<?, Server> startUDP() {
-        return RestFuture.create(()->{
+        return RestFuture.create(() -> {
             synchronized (udpLock) {
-                if(udpServerFuture != null) {
+                if (udpServerFuture != null) {
                     udpServerFuture.cancel(true);
                     udpServerFuture = null;
                 }
-                udpServerFuture = executor.scheduleWithFixedDelay(()->{
+                udpServerFuture = executor.scheduleWithFixedDelay(() -> {
                     long now = System.nanoTime();
-                    while(true) {
+                    while (true) {
                         try {
                             DatagramPacket packet = udpSide.receive();
-                            if(packet==null) break;
-                            DefaultChannelSet<JavaServerChannel> channelSet = getClients();
+                            if (packet == null) break;
+                            DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
                             JavaServerChannel channel;
                             synchronized (channelSet.getLock()) {
                                 channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
@@ -157,15 +156,15 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public RestFuture<?, Server> stopTCP() {
-        return RestFuture.create(()->{
+        return RestFuture.create(() -> {
             synchronized (tcpLock) {
-                if(tcpServerFuture != null) {
+                if (tcpServerFuture != null) {
                     tcpServerFuture.cancel(true);
                     tcpServerFuture = null;
                 }
                 isTCPClosed.set(true);
             }
-            DefaultChannelSet<JavaServerChannel> channelSet = getClients();
+            DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
             synchronized (channelSet.getLock()) {
                 channelSet.forEach((channel) -> {
                     try {
@@ -181,13 +180,13 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public RestFuture<?, Server> stopUDP() {
-        return RestFuture.create(()->{
+        return RestFuture.create(() -> {
             synchronized (udpLock) {
-                if(udpServerFuture != null) {
+                if (udpServerFuture != null) {
                     udpServerFuture.cancel(true);
                     udpServerFuture = null;
                 }
-                for(JavaServerChannel channel : getClients()) {
+                for (Channel channel : getClients()) {
                     channel.stopUDP().perform().get();
                 }
                 isUDPClosed.set(true);
@@ -212,10 +211,9 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     }
 
     private <T> void activateOption(ServerOption<T> option, T value) {
-        if(option==ServerOption.MAX_CLIENTS){
-             getClients().setMaxSize((Integer) value);
-        }
-        else if(option==ServerOption.RECEIVE_BUFFER_SIZE){ //for udp packets
+        if (option == ServerOption.MAX_CLIENTS) {
+            getClients().setMaxSize((Integer) value);
+        } else if (option == ServerOption.RECEIVE_BUFFER_SIZE) { //for udp packets
             udpSide.setBufferSize((Integer) value);
         }
     }

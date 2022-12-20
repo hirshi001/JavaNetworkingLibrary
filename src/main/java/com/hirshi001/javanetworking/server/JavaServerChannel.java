@@ -5,6 +5,7 @@ import com.hirshi001.buffer.buffers.ByteBuffer;
 import com.hirshi001.javanetworking.TCPSocket;
 import com.hirshi001.networking.network.channel.BaseChannel;
 import com.hirshi001.networking.network.channel.Channel;
+import com.hirshi001.networking.network.channel.ChannelOption;
 import com.hirshi001.restapi.RestFuture;
 
 import java.net.DatagramPacket;
@@ -29,21 +30,21 @@ public class JavaServerChannel extends BaseChannel {
     public long lastReceived = 0;
 
 
-    public JavaServerChannel(ScheduledExecutorService executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory){
+    public JavaServerChannel(ScheduledExecutorService executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory) {
         super(server, executor);
         this.address = address;
         this.tcpSide = new TCPSocket(bufferFactory);
         this.bufferFactory = bufferFactory;
     }
 
-    public void connect(Socket socket){
+    public void connect(Socket socket) {
         tcpSide.connect(socket);
         lastTCPReceivedValid = true;
         lastTCPReceived = lastReceived = System.nanoTime();
     }
 
-    public boolean checkNewTCPData(){
-        if(tcpSide.newDataAvailable()){
+    public boolean checkNewTCPData() {
+        if (tcpSide.newDataAvailable()) {
             ByteBuffer buffer = tcpSide.getData();
             onTCPBytesReceived(buffer);
             return true;
@@ -51,21 +52,21 @@ public class JavaServerChannel extends BaseChannel {
         return false;
     }
 
-    public void udpPacketReceived(byte[] bytes, int length, long time){
+    public void udpPacketReceived(byte[] bytes, int length, long time) {
         lastUDPReceived = time;
         lastReceived = time;
         onUDPPacketReceived(bufferFactory.wrap(bytes, 0, length));
     }
 
-    public int getUDPPacketTimeout(){
+    public long getUDPPacketTimeout() {
         return udpPacketTimeout;
     }
 
-    public int getTCPPacketTimeout(){
+    public long getTCPPacketTimeout() {
         return tcpPacketTimeout;
     }
 
-    public int getPacketTimeout(){
+    public long getPacketTimeout() {
         return packetTimeout;
     }
 
@@ -97,13 +98,15 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> startTCP() {
-        return RestFuture.create(()->{throw new UnsupportedOperationException("Cannot open TCP on the Server side");});
+        return RestFuture.create(() -> {
+            throw new UnsupportedOperationException("Cannot open TCP on the Server side");
+        });
     }
 
     @Override
     public RestFuture<?, Channel> stopTCP() {
-        return RestFuture.create(()->{
-            if(tcpSide.isClosed()) return this;
+        return RestFuture.create(() -> {
+            if (tcpSide.isClosed()) return this;
             lastTCPReceivedValid = false;
             tcpSide.disconnect();
             return this;
@@ -112,7 +115,7 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> startUDP() {
-        return RestFuture.create(()->{
+        return RestFuture.create(() -> {
             udpClosed.set(false);
             lastUDPReceivedValid = true;
             lastUDPReceived = lastReceived = System.nanoTime();
@@ -122,8 +125,8 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> stopUDP() {
-        return RestFuture.create(()->{
-            if(isUDPClosed()) return this;
+        return RestFuture.create(() -> {
+            if (isUDPClosed()) return this;
             lastUDPReceivedValid = false;
             udpClosed.set(true);
             return this;
@@ -142,12 +145,12 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> flushUDP() {
-        return RestFuture.create(()->this);
+        return RestFuture.create(() -> this);
     }
 
     @Override
     public RestFuture<?, Channel> flushTCP() {
-        return RestFuture.create(()->{
+        return RestFuture.create(() -> {
             tcpSide.flush();
             return this;
         });
@@ -159,11 +162,11 @@ public class JavaServerChannel extends BaseChannel {
     }
 
 
-    public JavaServer getSide(){
-        return (JavaServer)super.getSide();
+    public JavaServer getSide() {
+        return (JavaServer) super.getSide();
     }
 
-    public TCPSocket getTCPSide(){
+    public TCPSocket getTCPSide() {
         return tcpSide;
     }
 

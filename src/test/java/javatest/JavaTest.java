@@ -56,7 +56,7 @@ public class JavaTest {
     public NetworkData clientNetworkData;
 
     @BeforeEach
-    public void setup(){
+    public void setup() {
         bufferFactory = new DefaultBufferFactory();
         bufferFactory.defaultOrder(ByteOrder.BIG_ENDIAN);
 
@@ -92,7 +92,7 @@ public class JavaTest {
 
         serverPacketRegistryContainer.getDefaultRegistry().
                 registerDefaultPrimitivePackets().
-                register(new PacketHolder<>(IntegerPacket::new, JavaTest::randomIntegerResponse, IntegerPacket.class),0);
+                register(new PacketHolder<>(IntegerPacket::new, JavaTest::randomIntegerResponse, IntegerPacket.class), 0);
 
         server = networkFactory.createServer(serverNetworkData, bufferFactory, 1234);
         server.setChannelInitializer(new ChannelInitializer() {
@@ -101,10 +101,10 @@ public class JavaTest {
                 serverChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.TCP_KEEP_ALIVE, true);
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
-                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, (int)TimeUnit.SECONDS.toMillis(2));
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toMillis(2));
             }
         });
-        server.addServerListener(new AbstractServerListener(){
+        server.addServerListener(new AbstractServerListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 serverListenerReceived.incrementAndGet();
@@ -116,7 +116,7 @@ public class JavaTest {
             }
 
             @Override
-            public void onClientConnect(Server server, Channel channel){
+            public void onClientConnect(Server server, Channel channel) {
                 clientConnectListener.set(true);
             }
 
@@ -130,7 +130,7 @@ public class JavaTest {
 
         clientPacketRegistryContainer.getDefaultRegistry().
                 registerDefaultPrimitivePackets().
-                register(new PacketHolder<>(IntegerPacket::new, null , IntegerPacket.class), 0);
+                register(new PacketHolder<>(IntegerPacket::new, null, IntegerPacket.class), 0);
 
         client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
         client.setChannelInitializer(new ChannelInitializer() {
@@ -141,7 +141,7 @@ public class JavaTest {
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
             }
         });
-        client.addClientListener(new AbstractChannelListener(){
+        client.addClientListener(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 clientListenerReceived.incrementAndGet();
@@ -154,8 +154,8 @@ public class JavaTest {
         });
         client.startTCP().perform().get();
 
-        for(int i=0;i<packetCount;i++) {
-            client.sendTCPWithResponse(new IntegerPacket(i+1), null, 10000).
+        for (int i = 0; i < packetCount; i++) {
+            client.getChannel().sendTCPWithResponse(new IntegerPacket(i + 1), null, 10000).
                     pauseFor(ThreadLocalRandom.current().nextInt(5), TimeUnit.MILLISECONDS).
                     then((context) -> {
                         counter.incrementAndGet();
@@ -165,9 +165,9 @@ public class JavaTest {
         }
 
 
-        for(int i=0;i<15;i++){
+        for (int i = 0; i < 15; i++) {
             Thread.sleep(100);
-            assertFalse(clientDisconnectListener.get(), "Client disconnected at i="+i);
+            assertFalse(clientDisconnectListener.get(), "Client disconnected at i=" + i);
         }
         Thread.sleep(1500);
         assertTrue(clientDisconnectListener.get());
@@ -184,7 +184,6 @@ public class JavaTest {
         assertEquals(packetCount, counter.get());
 
 
-
         client.close();
 
         assertTrue(client.isClosed());
@@ -195,7 +194,7 @@ public class JavaTest {
         server.stopUDP().perform().get();
 
         assertTrue(server.isClosed());
-        for(Channel channel : (ChannelSet<Channel>)server.getClients()) {
+        for (Channel channel : server.getClients()) {
             assertTrue(channel.isUDPClosed());
             assertTrue(channel.isTCPClosed());
         }
@@ -222,19 +221,21 @@ public class JavaTest {
 
         serverPacketRegistryContainer.getDefaultRegistry().
                 registerDefaultPrimitivePackets().
-                register(new PacketHolder<>(IntegerPacket::new, JavaTest::randomIntegerResponse, IntegerPacket.class),0);
+                register(new PacketHolder<>(IntegerPacket::new, JavaTest::randomIntegerResponse, IntegerPacket.class), 0);
         server = networkFactory.createServer(serverNetworkData, bufferFactory, 1234);
-        server.addServerListener(new AbstractServerListener(){
+        server.addServerListener(new AbstractServerListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 serverListenerReceived.incrementAndGet();
             }
+
             @Override
             public void onSent(PacketHandlerContext<?> context) {
                 serverListenerSent.incrementAndGet();
             }
+
             @Override
-            public void onClientConnect(Server server, Channel channel){
+            public void onClientConnect(Server server, Channel channel) {
                 clientConnectListener.getAndIncrement();
             }
 
@@ -248,7 +249,7 @@ public class JavaTest {
             public void initChannel(Channel channel) {
                 serverChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
-                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, (int)TimeUnit.SECONDS.toMillis(2));
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toMillis(2));
             }
         });
         server.startUDP().perform().get();
@@ -258,13 +259,14 @@ public class JavaTest {
 
         clientPacketRegistryContainer.getDefaultRegistry().
                 registerDefaultPrimitivePackets().
-                register(new PacketHolder<>(IntegerPacket::new, null , IntegerPacket.class), 0);
+                register(new PacketHolder<>(IntegerPacket::new, null, IntegerPacket.class), 0);
         client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
-        client.addClientListener(new AbstractChannelListener(){
+        client.addClientListener(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 clientListenerReceived.incrementAndGet();
             }
+
             @Override
             public void onSent(PacketHandlerContext<?> context) {
                 clientListenerSent.incrementAndGet();
@@ -282,15 +284,15 @@ public class JavaTest {
         client.startTCP().perform().get();
 
 
-        for(int i=0;i<packetCount;i++) {
-            client.sendUDPWithResponse(new IntegerPacket(i+1), null, 1000).
+        for (int i = 0; i < packetCount; i++) {
+            client.getChannel().sendUDPWithResponse(new IntegerPacket(i + 1), null, 1000).
                     then((context) -> counter.incrementAndGet()).
                     perform();
         }
 
-        for(int i=0;i<15;i++){
+        for (int i = 0; i < 15; i++) {
             Thread.sleep(100);
-            assertEquals(0, clientDisconnectListener.get(), "Client disconnected at i="+i);
+            assertEquals(0, clientDisconnectListener.get(), "Client disconnected at i=" + i);
         }
         Thread.sleep(1500);
         assertEquals(1, clientDisconnectListener.get());
@@ -313,12 +315,12 @@ public class JavaTest {
 
     }
 
-    private static void randomIntegerResponse(PacketHandlerContext<IntegerPacket> context){
+    private static void randomIntegerResponse(PacketHandlerContext<IntegerPacket> context) {
         IntegerPacket ip = context.packet;
         String message = "Hello: From client: " + ip.value + ". To client:" + ThreadLocalRandom.current().nextInt(ip.value);
         StringPacket response = new StringPacket(message);
         response.setResponsePacket(ip);
-        if(context.packetType == PacketType.UDP) {
+        if (context.packetType == PacketType.UDP) {
             context.channel.sendUDP(response, null).perform();
         } else {
             context.channel.sendTCP(response, null).perform();
@@ -360,11 +362,11 @@ public class JavaTest {
             }
         });
 
-        server.addServerListener(new AbstractServerListener(){
+        server.addServerListener(new AbstractServerListener() {
             @Override
             public void onClientConnect(Server server, Channel clientChannel) {
                 int[] ints = new int[100000];
-                for(int i=0;i<ints.length;i++){
+                for (int i = 0; i < ints.length; i++) {
                     ints[i] = i;
                 }
                 clientChannel.sendTCP(new IntegerArrayPacket(ints), null).perform();
@@ -387,7 +389,7 @@ public class JavaTest {
         client.setChannelInitializer(channel -> {
             channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
         });
-        client.addClientListener(new AbstractChannelListener(){
+        client.addClientListener(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 received.set(true);
