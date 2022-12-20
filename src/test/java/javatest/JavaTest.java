@@ -12,6 +12,7 @@ import com.hirshi001.networking.network.server.AbstractServerListener;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.networkdata.DefaultNetworkData;
 import com.hirshi001.networking.networkdata.NetworkData;
+import com.hirshi001.networking.packet.DataPacket;
 import com.hirshi001.networking.packet.PacketHandler;
 import com.hirshi001.networking.packet.PacketHolder;
 import com.hirshi001.networking.packetdecoderencoder.PacketEncoderDecoder;
@@ -401,6 +402,42 @@ public class JavaTest {
         Thread.sleep(5000);
 
         assertTrue(received.get());
+    }
+
+    @Test
+    public void dataPacketTest() throws IOException, ExecutionException, InterruptedException {
+        serverNetworkData.getPacketRegistryContainer().getDefaultRegistry().registerDefaultPrimitivePackets();
+        server = networkFactory.createServer(serverNetworkData, bufferFactory, 1234);
+        final String message = "Hello, this will be sent to everyone";
+
+        AtomicBoolean received = new AtomicBoolean(false);
+
+        server.addServerListener(new AbstractServerListener() {
+            final DataPacket<StringPacket> dataPacket = DataPacket.of(bufferFactory.buffer(64), new StringPacket(message));
+
+            @Override
+            public void onClientConnect(Server server, Channel clientChannel) {
+                clientChannel.send(dataPacket, null, PacketType.TCP).perform();
+            }
+        });
+
+        server.startTCP().perform().get();
+
+        clientNetworkData.getPacketRegistryContainer().getDefaultRegistry().registerDefaultPrimitivePackets();
+        client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
+        client.addClientListener(new AbstractChannelListener() {
+            @Override
+            public void onReceived(PacketHandlerContext<?> context) {
+                StringPacket packet = (StringPacket) context.packet;
+                received.set(true);
+                assertEquals(message, packet.value);
+            }
+        });
+        client.startTCP().perform().get();
+        Thread.sleep(1000);
+
+        assertTrue(received.get());
+
     }
 
 }
