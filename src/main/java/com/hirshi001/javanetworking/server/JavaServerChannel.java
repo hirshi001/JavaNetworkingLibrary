@@ -144,6 +144,16 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     @Override
+    public RestFuture<Channel, Channel> checkUDPPackets() {
+        return null;
+    }
+
+    @Override
+    public RestFuture<Channel, Channel> checkTCPPackets() {
+        return null;
+    }
+
+    @Override
     public RestFuture<?, Channel> flushUDP() {
         return RestFuture.create(() -> this);
     }

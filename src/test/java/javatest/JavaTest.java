@@ -321,11 +321,7 @@ public class JavaTest {
         String message = "Hello: From client: " + ip.value + ". To client:" + ThreadLocalRandom.current().nextInt(ip.value);
         StringPacket response = new StringPacket(message);
         response.setResponsePacket(ip);
-        if (context.packetType == PacketType.UDP) {
-            context.channel.sendUDP(response, null).perform();
-        } else {
-            context.channel.sendTCP(response, null).perform();
-        }
+        context.channel.send(response, null, context.packetType).perform();
     }
 
     @Test

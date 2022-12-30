@@ -23,7 +23,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     private UDPSocket udpSide;
     private TCPServer tcpServer;
-    private Future<?> tcpServerFuture, udpServerFuture;
+    private Future<?> tcpServerFuture, udpServerFuture, tcpDataCheck;
     private ScheduledExecutorService executor;
 
     private final Object tcpLock = new Object();
@@ -40,36 +40,8 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
         this.tcpServer = new TCPServer(getPort());
         this.udpSide = new UDPSocket();
-        udpSide.connect(getPort());
+        // udpSide.connect(getPort());
 
-        executor.scheduleWithFixedDelay(() -> {
-            synchronized (getClients().getLock()) {
-                long now = System.nanoTime();
-                Iterator<Channel> iterator = getClients().iterator();
-                while (iterator.hasNext()) {
-                    JavaServerChannel channel = (JavaServerChannel) iterator.next();
-                    if (channel.isTCPOpen() && channel.checkNewTCPData()) {
-                        channel.lastTCPReceived = now;
-                        channel.lastReceived = now;
-                    }
-                    if ((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
-                            && now - channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())) {
-                        iterator.remove();
-                        channel.close().perform();
-                        continue;
-                    }
-                    if (channel.lastTCPReceivedValid && channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0
-                            && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
-                        channel.stopTCP().perform();
-                    }
-                    if (channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
-                            && now - channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())) {
-                        channel.stopUDP().perform();
-                    }
-
-                }
-            }
-        }, 0, 1, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -98,7 +70,6 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                                         } catch (IOException e) {
                                             e.printStackTrace();
                                         }
-                                        return;
                                     }
                                 } else channel.connect(socket);
                             }
@@ -108,9 +79,33 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                         e.printStackTrace();
                     }
                 });
+
+                scheduleTCP();
             }
             return this;
         });
+    }
+
+    private void scheduleTCP() {
+        synchronized (tcpLock) {
+            if (tcpDataCheck != null) {
+                tcpDataCheck.cancel(true);
+            }
+
+            Integer delay = getServerOption(ServerOption.TCP_PACKET_CHECK_INTERVAL);
+            if(delay==null) delay=0;
+
+            if (delay >= 0) {
+                if(delay==0) delay=1;
+                tcpDataCheck = executor.scheduleWithFixedDelay(() -> {
+                    try {
+                        checkTCPPackets().perform().get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        throw new RuntimeException(e);
+                    }
+                }, 0, delay, TimeUnit.MILLISECONDS);
+            }
+        }
     }
 
     public UDPSocket getUDPSide() {
@@ -121,37 +116,35 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     public RestFuture<?, Server> startUDP() {
         return RestFuture.create(() -> {
             synchronized (udpLock) {
-                if (udpServerFuture != null) {
-                    udpServerFuture.cancel(true);
-                    udpServerFuture = null;
-                }
-                udpServerFuture = executor.scheduleWithFixedDelay(() -> {
-                    long now = System.nanoTime();
-                    while (true) {
-                        try {
-                            DatagramPacket packet = udpSide.receive();
-                            if (packet == null) break;
-                            DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
-                            JavaServerChannel channel;
-                            synchronized (channelSet.getLock()) {
-                                channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
-                                if (channel == null) {
-                                    channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
-                                    if (!addChannel(channel)) return;
-                                    channel.startUDP().perform();
-                                }
-                            }
-                            channel.udpPacketReceived(packet.getData(), packet.getLength(), now);
-
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }, 0, 1, TimeUnit.MILLISECONDS);
+                udpSide.connect(getPort());
+                scheduleUDP();
                 isUDPClosed.set(false);
             }
             return this;
         });
+    }
+
+    private void scheduleUDP(){
+        synchronized (udpLock) {
+            if (udpServerFuture != null) {
+                udpServerFuture.cancel(true);
+                udpServerFuture = null;
+            }
+
+            Integer delay = getServerOption(ServerOption.UDP_PACKET_CHECK_INTERVAL);
+            if(delay==null) delay=0;
+
+            if (delay >= 0) {
+                if(delay==0) delay=1;
+                udpServerFuture = executor.scheduleWithFixedDelay(() -> {
+                    try {
+                        checkUDPPackets().perform().get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        throw new RuntimeException(e);
+                    }
+                }, 0, delay, TimeUnit.MILLISECONDS);
+            }
+        }
     }
 
     @Override
@@ -162,7 +155,11 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                     tcpServerFuture.cancel(true);
                     tcpServerFuture = null;
                 }
+                if (tcpDataCheck != null) {
+                    tcpDataCheck.cancel(true);
+                }
                 isTCPClosed.set(true);
+
             }
             DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
             synchronized (channelSet.getLock()) {
@@ -215,6 +212,12 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
             getClients().setMaxSize((Integer) value);
         } else if (option == ServerOption.RECEIVE_BUFFER_SIZE) { //for udp packets
             udpSide.setBufferSize((Integer) value);
+        } else if (option == ServerOption.UDP_PACKET_CHECK_INTERVAL) {
+            synchronized (udpLock) {
+                scheduleUDP();
+            }
+        } else if (option == ServerOption.TCP_PACKET_CHECK_INTERVAL) {
+            scheduleTCP();
         }
     }
 
@@ -241,12 +244,82 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public boolean isClosed() {
-        return isTCPClosed.get() && isUDPClosed.get();
+        return !isOpen();
+    }
+
+    @Override
+    public boolean tcpOpen() {
+        return !isTCPClosed.get();
+    }
+
+    @Override
+    public boolean udpOpen() {
+        return !isUDPClosed.get();
+    }
+
+    @Override
+    public RestFuture<Server, Server> checkUDPPackets() {
+        return RestFuture.create( ()->{
+            long now = System.nanoTime();
+            while (true) {
+                try {
+                    DatagramPacket packet = udpSide.receive();
+                    if (packet == null) break;
+                    DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
+                    JavaServerChannel channel;
+                    synchronized (channelSet.getLock()) {
+                        channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
+                        if (channel == null) {
+                            channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
+                            if (!addChannel(channel)) continue;
+                            channel.startUDP().perform();
+                        }
+                    }
+                    channel.udpPacketReceived(packet.getData(), packet.getLength(), now);
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            return this;
+        });
+    }
+
+    @Override
+    public RestFuture<Server, Server> checkTCPPackets() {
+        return RestFuture.create( ()->{
+            synchronized (getClients().getLock()) {
+                long now = System.nanoTime();
+                Iterator<Channel> iterator = getClients().iterator();
+                while (iterator.hasNext()) {
+                    JavaServerChannel channel = (JavaServerChannel) iterator.next();
+                    if (channel.isTCPOpen() && channel.checkNewTCPData()) {
+                        channel.lastTCPReceived = now;
+                        channel.lastReceived = now;
+                    }
+                    if ((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
+                            && now - channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())) {
+                        iterator.remove();
+                        channel.close().perform();
+                        continue;
+                    }
+                    if (channel.lastTCPReceivedValid && channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0
+                            && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
+                        channel.stopTCP().perform();
+                    }
+                    if (channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
+                            && now - channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())) {
+                        channel.stopUDP().perform();
+                    }
+                }
+            }
+            return this;
+        });
     }
 
     @Override
     public boolean isOpen() {
-        return !isClosed();
+        return tcpOpen() || udpOpen();
     }
 
     @Override

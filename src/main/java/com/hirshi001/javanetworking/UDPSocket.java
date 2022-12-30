@@ -5,6 +5,7 @@ import com.hirshi001.networking.network.channel.ChannelOption;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
+import java.net.ProtocolFamily;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.Map;
@@ -22,7 +23,9 @@ public class UDPSocket {
     }
 
     public void connect(int localPort) throws IOException {
+
         channel = DatagramChannel.open();
+
         channel.bind(new InetSocketAddress(localPort));
         this.localPort = channel.socket().getLocalPort();
         channel.configureBlocking(false);
@@ -37,7 +40,7 @@ public class UDPSocket {
     }
 
 
-    public void send(DatagramPacket datagramPacket){
+    public void send(DatagramPacket datagramPacket) {
         try {
             channel.send(ByteBuffer.wrap(datagramPacket.getData()), datagramPacket.getSocketAddress());
         } catch (Exception e) {
@@ -45,24 +48,23 @@ public class UDPSocket {
         }
     }
 
-    public void close(){
+    public void close() {
         try {
-            if(channel!=null) channel.close();
+            if (channel != null) channel.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public boolean isConnected(){
+    public boolean isConnected() {
         return channel != null && channel.isOpen();
     }
-
 
 
     public DatagramPacket receive() throws IOException {
         ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
         InetSocketAddress address = (InetSocketAddress) channel.receive(byteBuffer);
-        if(address == null) return null;
+        if (address == null) return null;
 
         int size = byteBuffer.position();
         DatagramPacket packet = new DatagramPacket(byteBuffer.array().clone(), size);
@@ -72,13 +74,13 @@ public class UDPSocket {
         return packet;
     }
 
-    public void setBufferSize(int size){
+    public void setBufferSize(int size) {
         buffer = new byte[size];
     }
 
-    public <T> void setOption(ChannelOption<T> option, T value){
+    public <T> void setOption(ChannelOption<T> option, T value) {
         options.put(option, value);
-        if(JavaOptionMap.DATAGRAM_SOCKET_OPTION_MAP.containsKey(option)){
+        if (JavaOptionMap.DATAGRAM_SOCKET_OPTION_MAP.containsKey(option)) {
             try {
                 JavaOptionMap.DATAGRAM_SOCKET_OPTION_MAP.get(option).accept(channel.socket(), value);
             } catch (Exception e) {
@@ -87,14 +89,13 @@ public class UDPSocket {
         }
     }
 
-    public <T> T getOption(ChannelOption<T> option){
+    public <T> T getOption(ChannelOption<T> option) {
         return (T) options.get(option);
     }
 
-    public int getLocalPort(){
+    public int getLocalPort() {
         return channel.socket().getLocalPort();
     }
-
 
 
 }
