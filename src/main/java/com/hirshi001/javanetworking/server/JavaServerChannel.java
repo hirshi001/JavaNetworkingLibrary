@@ -6,6 +6,7 @@ import com.hirshi001.javanetworking.TCPSocket;
 import com.hirshi001.networking.network.channel.BaseChannel;
 import com.hirshi001.networking.network.channel.Channel;
 import com.hirshi001.networking.network.channel.ChannelOption;
+import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
 
 import java.net.DatagramPacket;
@@ -55,7 +56,7 @@ public class JavaServerChannel extends BaseChannel {
     public void udpPacketReceived(byte[] bytes, int length, long time) {
         lastUDPReceived = time;
         lastReceived = time;
-        onUDPPacketReceived(bufferFactory.wrap(bytes, 0, length));
+        onUDPPacketsReceived(bufferFactory.wrap(bytes, 0, length));
     }
 
     public long getUDPPacketTimeout() {
@@ -71,14 +72,13 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     @Override
-    protected void sendTCP(byte[] data, int offset, int length) {
-        tcpSide.writeData(data, offset, length);
+    protected void writeAndFlushTCP(ByteBuffer buffer) {
+        tcpSide.writeAndFlush(buffer);
     }
 
     @Override
-    protected void sendUDP(byte[] data, int offset, int length) {
-        DatagramPacket packet = new DatagramPacket(data, offset, length, address);
-        getSide().getUDPSide().send(packet);
+    protected void writeAndFlushUDP(ByteBuffer buffer) {
+        getSide().getUDPSide().send(buffer, address);
     }
 
     @Override
@@ -98,14 +98,14 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> startTCP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             throw new UnsupportedOperationException("Cannot open TCP on the Server side");
         });
     }
 
     @Override
     public RestFuture<?, Channel> stopTCP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             if (tcpSide.isClosed()) return this;
             lastTCPReceivedValid = false;
             tcpSide.disconnect();
@@ -115,7 +115,7 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> startUDP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             udpClosed.set(false);
             lastUDPReceivedValid = true;
             lastUDPReceived = lastReceived = System.nanoTime();
@@ -125,7 +125,7 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> stopUDP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             if (isUDPClosed()) return this;
             lastUDPReceivedValid = false;
             udpClosed.set(true);
@@ -144,33 +144,23 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<Channel, Channel> checkUDPPackets() {
-        return null;
+    public void checkUDPPackets() {
+        getSide().checkUDPPackets();
     }
 
     @Override
-    public RestFuture<Channel, Channel> checkTCPPackets() {
-        return null;
-    }
-
-    @Override
-    public RestFuture<?, Channel> flushUDP() {
-        return RestFuture.create(() -> this);
-    }
-
-    @Override
-    public RestFuture<?, Channel> flushTCP() {
-        return RestFuture.create(() -> {
-            tcpSide.flush();
-            return this;
-        });
+    public void checkTCPPackets() {
+        long now = System.nanoTime();
+        if(isTCPOpen() && checkNewTCPData()){
+            lastTCPReceived = now;
+            lastReceived = now;
+        }
     }
 
     @Override
     public boolean isUDPOpen() {
         return !udpClosed.get();
     }
-
 
     public JavaServer getSide() {
         return (JavaServer) super.getSide();

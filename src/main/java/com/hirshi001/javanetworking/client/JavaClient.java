@@ -9,6 +9,7 @@ import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.client.ClientOption;
 import com.hirshi001.networking.network.server.ServerListener;
 import com.hirshi001.networking.networkdata.NetworkData;
+import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
 
 import java.net.InetSocketAddress;
@@ -82,22 +83,8 @@ public class JavaClient extends BaseClient {
     }
 
     @Override
-    public void close() {
-        try {
-            stopTCP().perform().get();
-        } catch (InterruptedException | ExecutionException e) {
-            e.printStackTrace();
-        }
-        try {
-            stopUDP().perform().get();
-        } catch (InterruptedException | ExecutionException e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Override
     public RestFuture<?, Client> startTCP() {
-        return RestFuture.create((future, inputNull)->{
+        return RestAPI.create((future, inputNull)->{
             createChannelIfNull();
             if(!channel.supportsTCP()){
                 future.setCause(new UnsupportedOperationException("TCP is not supported on this client"));
@@ -109,7 +96,7 @@ public class JavaClient extends BaseClient {
 
     @Override
     public RestFuture<?, Client> startUDP() {
-        return RestFuture.create((future, inputNull)->{
+        return RestAPI.create((future, inputNull)->{
             createChannelIfNull();
             if(!channel.supportsUDP()){
                 future.setCause(new UnsupportedOperationException("UDP is not supported on this client"));
@@ -121,27 +108,17 @@ public class JavaClient extends BaseClient {
 
     @Override
     public RestFuture<?, Client> stopTCP() {
-        return channel.stopTCP().map((c)->this);
-    }
-
-    @Override
-    public RestFuture<?, Client> stopUDP() {
-        return channel.stopUDP().map((c)->this);
-    }
-
-    @Override
-    public RestFuture<Client, Client> checkUDPPackets() {
-        return RestFuture.create( ()->{
-            getChannel().checkUDPPackets().perform().get();
-            return this;
+        return RestAPI.create( ()->{
+            if(channel!=null) channel.stopTCP().perform();
+            return JavaClient.this;
         });
     }
 
     @Override
-    public RestFuture<Client, Client> checkTCPPackets() {
-        return RestFuture.create( ()->{
-            getChannel().checkTCPPackets().perform().get();
-            return this;
+    public RestFuture<?, Client> stopUDP() {
+        return RestAPI.create( ()->{
+            if(channel!=null) channel.stopUDP().perform();
+            return JavaClient.this;
         });
     }
 
@@ -153,4 +130,6 @@ public class JavaClient extends BaseClient {
             }
         }
     }
+
+
 }

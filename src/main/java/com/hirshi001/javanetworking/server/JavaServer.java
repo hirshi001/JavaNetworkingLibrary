@@ -8,6 +8,7 @@ import com.hirshi001.networking.network.server.BaseServer;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.network.server.ServerOption;
 import com.hirshi001.networking.networkdata.NetworkData;
+import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
 
 import java.io.IOException;
@@ -46,7 +47,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public RestFuture<?, Server> startTCP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (tcpLock) {
                 if (tcpServerFuture != null) {
                     tcpServerFuture.cancel(false);
@@ -97,13 +98,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
             if (delay >= 0) {
                 if(delay==0) delay=1;
-                tcpDataCheck = executor.scheduleWithFixedDelay(() -> {
-                    try {
-                        checkTCPPackets().perform().get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
-                    }
-                }, 0, delay, TimeUnit.MILLISECONDS);
+                tcpDataCheck = executor.scheduleWithFixedDelay(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
@@ -114,7 +109,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public RestFuture<?, Server> startUDP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (udpLock) {
                 udpSide.connect(getPort());
                 scheduleUDP();
@@ -136,20 +131,14 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
             if (delay >= 0) {
                 if(delay==0) delay=1;
-                udpServerFuture = executor.scheduleWithFixedDelay(() -> {
-                    try {
-                        checkUDPPackets().perform().get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
-                    }
-                }, 0, delay, TimeUnit.MILLISECONDS);
+                udpServerFuture = executor.scheduleWithFixedDelay(this::checkUDPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
 
     @Override
     public RestFuture<?, Server> stopTCP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (tcpLock) {
                 if (tcpServerFuture != null) {
                     tcpServerFuture.cancel(true);
@@ -177,7 +166,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     @Override
     public RestFuture<?, Server> stopUDP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (udpLock) {
                 if (udpServerFuture != null) {
                     udpServerFuture.cancel(true);
@@ -211,11 +200,9 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         if (option == ServerOption.MAX_CLIENTS) {
             getClients().setMaxSize((Integer) value);
         } else if (option == ServerOption.RECEIVE_BUFFER_SIZE) { //for udp packets
-            udpSide.setBufferSize((Integer) value);
+            udpSide.setSendBufferSize((Integer) value);
         } else if (option == ServerOption.UDP_PACKET_CHECK_INTERVAL) {
-            synchronized (udpLock) {
-                scheduleUDP();
-            }
+            scheduleUDP();
         } else if (option == ServerOption.TCP_PACKET_CHECK_INTERVAL) {
             scheduleTCP();
         }
@@ -258,63 +245,56 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     }
 
     @Override
-    public RestFuture<Server, Server> checkUDPPackets() {
-        return RestFuture.create( ()->{
-            long now = System.nanoTime();
-            while (true) {
-                try {
-                    DatagramPacket packet = udpSide.receive();
-                    if (packet == null) break;
-                    DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
-                    JavaServerChannel channel;
-                    synchronized (channelSet.getLock()) {
-                        channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
-                        if (channel == null) {
-                            channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
-                            if (!addChannel(channel)) continue;
-                            channel.startUDP().perform();
-                        }
+    public void checkUDPPackets() {
+        long now = System.nanoTime();
+        while (true) {
+            try {
+                DatagramPacket packet = udpSide.receive();
+                if (packet == null) break;
+                DefaultChannelSet<JavaServerChannel> channelSet = (DefaultChannelSet) getClients();
+                JavaServerChannel channel;
+                synchronized (channelSet.getLock()) {
+                    channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
+                    if (channel == null) {
+                        channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
+                        if (!addChannel(channel)) continue;
+                        channel.startUDP().perform();
                     }
-                    channel.udpPacketReceived(packet.getData(), packet.getLength(), now);
-
-                } catch (IOException e) {
-                    e.printStackTrace();
                 }
+                channel.udpPacketReceived(packet.getData(), packet.getLength(), now);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-            return this;
-        });
+        }
     }
 
     @Override
-    public RestFuture<Server, Server> checkTCPPackets() {
-        return RestFuture.create( ()->{
-            synchronized (getClients().getLock()) {
-                long now = System.nanoTime();
-                Iterator<Channel> iterator = getClients().iterator();
-                while (iterator.hasNext()) {
-                    JavaServerChannel channel = (JavaServerChannel) iterator.next();
-                    if (channel.isTCPOpen() && channel.checkNewTCPData()) {
-                        channel.lastTCPReceived = now;
-                        channel.lastReceived = now;
-                    }
-                    if ((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
-                            && now - channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())) {
-                        iterator.remove();
-                        channel.close().perform();
-                        continue;
-                    }
-                    if (channel.lastTCPReceivedValid && channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0
-                            && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
-                        channel.stopTCP().perform();
-                    }
-                    if (channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
-                            && now - channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())) {
-                        channel.stopUDP().perform();
-                    }
+    public void checkTCPPackets() {
+        synchronized (getClients().getLock()) {
+            long now = System.nanoTime();
+            Iterator<Channel> iterator = getClients().iterator();
+            while (iterator.hasNext()) {
+                JavaServerChannel channel = (JavaServerChannel) iterator.next();
+                if (channel.isTCPOpen() && channel.checkNewTCPData()) {
+                    channel.lastTCPReceived = now;
+                    channel.lastReceived = now;
+                }
+                if ((channel.lastTCPReceivedValid || channel.lastUDPReceivedValid) && channel.getPacketTimeout() > 0
+                        && now - channel.lastReceived > TimeUnit.MILLISECONDS.toNanos(channel.getPacketTimeout())) {
+                    iterator.remove();
+                    channel.close().perform();
+                    continue;
+                }
+                if (channel.lastTCPReceivedValid && channel.isTCPOpen() && channel.getTCPPacketTimeout() > 0
+                        && now - channel.lastTCPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getTCPPacketTimeout())) {
+                    channel.stopTCP().perform();
+                }
+                if (channel.lastUDPReceivedValid && channel.isUDPOpen() && channel.getUDPPacketTimeout() > 0
+                        && now - channel.lastUDPReceived > TimeUnit.MILLISECONDS.toNanos(channel.getUDPPacketTimeout())) {
+                    channel.stopUDP().perform();
                 }
             }
-            return this;
-        });
+        }
     }
 
     @Override

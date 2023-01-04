@@ -2,20 +2,21 @@ package com.hirshi001.javanetworking.client;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
 import com.hirshi001.buffer.buffers.ByteBuffer;
+import com.hirshi001.buffer.buffers.CircularArrayBackedByteBuffer;
 import com.hirshi001.javanetworking.TCPSocket;
 import com.hirshi001.javanetworking.UDPSocket;
 import com.hirshi001.networking.network.channel.BaseChannel;
 import com.hirshi001.networking.network.channel.Channel;
+import com.hirshi001.networking.network.channel.ChannelOption;
 import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.client.ClientOption;
+import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -53,47 +54,44 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<Channel, Channel> checkUDPPackets() {
-        return RestFuture.create( ()-> {
-            DatagramPacket packet;
-            while (true) {
-                try {
-                    packet = udpSide.receive();
-                    if (packet == null) break;
-                    onUDPPacketReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
-                } catch (IOException e) {
-                    break;
-                }
+    public void checkUDPPackets() {
+        DatagramPacket packet;
+        while (true) {
+            try {
+                packet = udpSide.receive();
+                if (packet == null) break;
+                onUDPPacketsReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
+            } catch (IOException e) {
+                break;
             }
-            return this;
-        });
+        }
     }
 
     @Override
-    public RestFuture<Channel, Channel> checkTCPPackets() {
-        return RestFuture.create(()->{
-            if (tcpSide.isClosed()) {
-                stopTCP().perform();
-                return this;
-            }
-            if (tcpSide.newDataAvailable()) {
-                ByteBuffer buffer = tcpSide.getData();
-                onTCPBytesReceived(buffer);
-            }
-            return this;
-        });
-
+    protected <T> boolean activateOption(ChannelOption<T> option, T value) {
+        boolean success = super.activateOption(option, value);
+        udpSide.setOption(option, value);
+        tcpSide.setOption(option, value);
+        if (option == ChannelOption.UDP_RECEIVE_BUFFER_SIZE) {
+            udpSide.udpReceiveBufferSize((Integer) value);
+            return true;
+        }
+        else if (option==ChannelOption.MAX_UDP_PAYLOAD_SIZE) {
+            udpSide.setSendBufferSize((Integer) value);
+            return true;
+        }
+        return success;
     }
 
     @Override
-    protected void sendTCP(byte[] data, int offset, int length) {
-        tcpSide.writeData(data, offset, length);
-    }
-
-    @Override
-    protected void sendUDP(byte[] data, int offset, int length) {
-        DatagramPacket packet = new DatagramPacket(data, offset, length, address);
-        udpSide.send(packet);
+    public void checkTCPPackets() {
+        if (tcpSide.isClosed()) {
+            stopTCP().perform();
+        }
+        if (tcpSide.newDataAvailable()) {
+            ByteBuffer buffer = tcpSide.getData();
+            onTCPBytesReceived(buffer);
+        }
     }
 
     @Override
@@ -118,58 +116,51 @@ public class JavaClientChannel extends BaseChannel {
     }
 
     @Override
-    public RestFuture<?, Channel> flushUDP() {
-        return RestFuture.create(() -> this);
+    protected void writeAndFlushTCP(ByteBuffer buffer) {
+        tcpSide.writeAndFlush(buffer);
     }
 
     @Override
-    public RestFuture<?, Channel> flushTCP() {
-        return RestFuture.create(() -> {
-            tcpSide.flush();
-            return this;
-        });
+    protected void writeAndFlushUDP(ByteBuffer buffer) {
+        udpSide.send(buffer, address);
+        buffer.clear();
     }
+
 
     @Override
     public RestFuture<?, Channel> startTCP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (connectLock) {
                 Socket socket = new Socket(address.getAddress(), address.getPort(), null, localPort);
                 tcpSide.connect(socket);
                 localPort = tcpSide.getLocalPort();
                 scheduleTCP();
             }
+            getListenerHandler().onTCPConnect(this);
             return this;
         });
     }
 
     void scheduleTCP() {
         synchronized (tcpLock) {
-            if(!isTCPOpen()) return;
+            if (!isTCPOpen()) return;
             if (tcpFuture != null) {
                 tcpFuture.cancel(false);
             }
 
-            Integer delay = getSide().getClientOption(ClientOption.UDP_PACKET_CHECK_INTERVAL);
-            if(delay==null) delay = 0;
+            Integer delay = getSide().getClientOption(ClientOption.TCP_PACKET_CHECK_INTERVAL);
+            if (delay == null) delay = 0;
 
             if (delay >= 0) {
                 if (delay == 0) delay = 1; // minimum delay of 1 ms
-
-                tcpFuture = getExecutor().scheduleWithFixedDelay(() -> {
-                    try {
-                        checkTCPPackets().perform().get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
-                    }
-                }, 0, delay, TimeUnit.MILLISECONDS);
+                tcpFuture = getExecutor().scheduleWithFixedDelay(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
 
     @Override
     public RestFuture<?, Channel> stopTCP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (tcpLock) {
                 if (isTCPClosed()) return this;
                 tcpSide.disconnect();
@@ -179,6 +170,7 @@ public class JavaClientChannel extends BaseChannel {
                 if (isTCPClosed() && isUDPClosed()) {
                     close().perform();
                 }
+                getListenerHandler().onTCPDisconnect(this);
                 return this;
             }
         });
@@ -186,43 +178,37 @@ public class JavaClientChannel extends BaseChannel {
 
     @Override
     public RestFuture<?, Channel> startUDP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (connectLock) {
                 udpSide.connect(localPort);
                 localPort = udpSide.getLocalPort();
                 scheduleUDP();
             }
+            getListenerHandler().onUDPStart(this);
             return this;
         });
     }
 
     void scheduleUDP() {
         synchronized (udpLock) {
-            if(!isUDPOpen()) return;
+            if (!isUDPOpen()) return;
             if (udpFuture != null) {
                 udpFuture.cancel(true);
             }
 
             Integer delay = getSide().getClientOption(ClientOption.UDP_PACKET_CHECK_INTERVAL);
-            if(delay==null) delay = 0;
+            if (delay == null) delay = 0;
             if (delay >= 0) {
                 if (delay == 0) delay = 1; // minimum delay of 1 ms
-                udpFuture = getExecutor().scheduleWithFixedDelay(() -> {
-                    try {
-                        checkUDPPackets().perform().get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
-                    }
-                }, 0, delay, TimeUnit.MILLISECONDS);
+                udpFuture = getExecutor().scheduleWithFixedDelay(this::checkUDPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
 
 
-
     @Override
     public RestFuture<?, Channel> stopUDP() {
-        return RestFuture.create(() -> {
+        return RestAPI.create(() -> {
             synchronized (udpLock) {
                 if (isUDPClosed()) return this;
                 if (udpFuture != null) {
@@ -233,6 +219,7 @@ public class JavaClientChannel extends BaseChannel {
                 if (isTCPClosed() && isUDPClosed()) {
                     close().perform();
                 }
+                getListenerHandler().onUDPStop(this);
                 return this;
             }
         });

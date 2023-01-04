@@ -2,6 +2,7 @@ package com.hirshi001.javanetworking;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
 import com.hirshi001.buffer.buffers.ByteBuffer;
+import com.hirshi001.buffer.buffers.CircularArrayBackedByteBuffer;
 import com.hirshi001.networking.network.channel.ChannelOption;
 
 import java.io.IOException;
@@ -84,6 +85,26 @@ public class TCPSocket {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public void writeAndFlush(ByteBuffer buffer){
+        if (buffer.hasArray()) {
+            writeData(buffer.array(), buffer.readerIndex(), buffer.readableBytes());
+        } else if (buffer instanceof CircularArrayBackedByteBuffer) {
+            CircularArrayBackedByteBuffer cbuffer = (CircularArrayBackedByteBuffer) buffer;
+            if (cbuffer.arrayReaderIndex() <= cbuffer.arrayWriterIndex()) {
+                writeData(cbuffer.array(), cbuffer.arrayReaderIndex(), cbuffer.arrayWriterIndex() - cbuffer.arrayReaderIndex());
+            } else {
+                writeData(cbuffer.array(), cbuffer.arrayReaderIndex(), cbuffer.array().length - cbuffer.arrayReaderIndex());
+                writeData(cbuffer.array(), 0, cbuffer.arrayWriterIndex());
+            }
+        } else {
+            byte[] bytes = new byte[buffer.readableBytes()];
+            int length = buffer.readBytes(bytes);
+            writeData(bytes, 0, length);
+        }
+        flush();
+        buffer.clear();
     }
 
     public void flush() {

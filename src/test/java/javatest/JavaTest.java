@@ -5,11 +5,13 @@ import com.hirshi001.buffer.bufferfactory.DefaultBufferFactory;
 import com.hirshi001.buffer.byteorder.ByteOrder;
 import com.hirshi001.javanetworking.JavaNetworkFactory;
 import com.hirshi001.javanetworking.server.JavaServerChannel;
+import com.hirshi001.javarestapi.JavaRestFutureFactory;
 import com.hirshi001.networking.network.NetworkFactory;
 import com.hirshi001.networking.network.channel.*;
 import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.server.AbstractServerListener;
 import com.hirshi001.networking.network.server.Server;
+import com.hirshi001.networking.network.server.ServerOption;
 import com.hirshi001.networking.networkdata.DefaultNetworkData;
 import com.hirshi001.networking.networkdata.NetworkData;
 import com.hirshi001.networking.packet.DataPacket;
@@ -27,6 +29,7 @@ import com.hirshi001.networking.util.defaultpackets.arraypackets.DoubleArrayPack
 import com.hirshi001.networking.util.defaultpackets.arraypackets.IntegerArrayPacket;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.IntegerPacket;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.StringPacket;
+import com.hirshi001.restapi.RestAPI;
 import logger.Logger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +61,8 @@ public class JavaTest {
 
     @BeforeEach
     public void setup() {
+        RestAPI.setFactory(new JavaRestFutureFactory());
+
         bufferFactory = new DefaultBufferFactory();
         bufferFactory.defaultOrder(ByteOrder.BIG_ENDIAN);
 
@@ -249,12 +254,12 @@ public class JavaTest {
             @Override
             public void initChannel(Channel channel) {
                 serverChannelInitialized.set(true);
-                channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+                channel.setChannelOption(ChannelOption.UDP_AUTO_FLUSH, true);
                 channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toMillis(2));
             }
         });
+        server.startTCP().perform().get(); // check for disconnect
         server.startUDP().perform().get();
-        server.startTCP().perform().get();
 
         Thread.sleep(5);
 
@@ -278,12 +283,11 @@ public class JavaTest {
             @Override
             public void initChannel(Channel channel) {
                 clientChannelInitialized.set(true);
-                channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+                channel.setChannelOption(ChannelOption.UDP_AUTO_FLUSH, true);
             }
         });
-        client.startUDP().perform().get();
         client.startTCP().perform().get();
-
+        client.startUDP().perform().get();
 
         for (int i = 0; i < packetCount; i++) {
             client.getChannel().sendUDPWithResponse(new IntegerPacket(i + 1), null, 1000).
@@ -378,7 +382,6 @@ public class JavaTest {
                     @Override
                     public void handle(PacketHandlerContext<IntegerArrayPacket> context) {
                         received.set(true);
-                        System.out.println(context.packet);
                     }
                 }, IntegerArrayPacket.class, 0);
 
@@ -414,6 +417,7 @@ public class JavaTest {
             @Override
             public void onClientConnect(Server server, Channel clientChannel) {
                 clientChannel.send(dataPacket, null, PacketType.TCP).perform();
+                clientChannel.flushTCP();
             }
         });
 

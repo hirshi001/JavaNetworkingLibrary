@@ -1,11 +1,11 @@
 package com.hirshi001.javanetworking;
 
+import com.hirshi001.buffer.buffers.CircularArrayBackedByteBuffer;
 import com.hirshi001.networking.network.channel.ChannelOption;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
-import java.net.ProtocolFamily;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.Map;
@@ -14,12 +14,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UDPSocket {
 
     private DatagramChannel channel;
-    byte[] buffer;
+    byte[] receiveBuffer;
+    byte[] sendBuffer;
+
+    private final Object sendBufferLock = new Object();
+
     private Map<ChannelOption, Object> options;
-    private int localPort;
-
     public UDPSocket() {
-
+        options = new ConcurrentHashMap<>();
     }
 
     public void connect(int localPort) throws IOException {
@@ -27,12 +29,10 @@ public class UDPSocket {
         channel = DatagramChannel.open();
 
         channel.bind(new InetSocketAddress(localPort));
-        this.localPort = channel.socket().getLocalPort();
         channel.configureBlocking(false);
 
-        options = new ConcurrentHashMap<>();
-
-        buffer = new byte[1024];
+        receiveBuffer = new byte[512];
+        sendBuffer = new byte[512];
     }
 
     public int getPort() {
@@ -40,11 +40,19 @@ public class UDPSocket {
     }
 
 
-    public void send(DatagramPacket datagramPacket) {
+    public void send(byte[] bytes, int offset, int length, InetSocketAddress address)  {
         try {
-            channel.send(ByteBuffer.wrap(datagramPacket.getData()), datagramPacket.getSocketAddress());
+            channel.send(ByteBuffer.wrap(bytes, offset, length), address);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+
+    public void send(com.hirshi001.buffer.buffers.ByteBuffer buffer, InetSocketAddress address)  {
+        synchronized (sendBufferLock) {
+            int size =  buffer.readBytes(sendBuffer);
+            send(sendBuffer, 0, size, address);
         }
     }
 
@@ -62,7 +70,7 @@ public class UDPSocket {
 
 
     public DatagramPacket receive() throws IOException {
-        ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+        ByteBuffer byteBuffer = ByteBuffer.wrap(receiveBuffer);
         InetSocketAddress address = (InetSocketAddress) channel.receive(byteBuffer);
         if (address == null) return null;
 
@@ -74,8 +82,14 @@ public class UDPSocket {
         return packet;
     }
 
-    public void setBufferSize(int size) {
-        buffer = new byte[size];
+    public void setSendBufferSize(int size) {
+        synchronized (sendBufferLock) {
+            sendBuffer = new byte[size];
+        }
+    }
+
+    public void udpReceiveBufferSize(int size){
+        receiveBuffer = new byte[size];
     }
 
     public <T> void setOption(ChannelOption<T> option, T value) {
