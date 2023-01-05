@@ -10,6 +10,7 @@ import com.hirshi001.networking.network.server.ServerOption;
 import com.hirshi001.networking.networkdata.NetworkData;
 import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
+import com.hirshi001.restapi.ScheduledExec;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -26,6 +27,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     private TCPServer tcpServer;
     private Future<?> tcpServerFuture, udpServerFuture, tcpDataCheck;
     private ScheduledExecutorService executor;
+    private ScheduledExec exec;
 
     private final Object tcpLock = new Object();
     private final Object udpLock = new Object();
@@ -38,6 +40,22 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
     public JavaServer(ScheduledExecutorService scheduledExecutorService, NetworkData networkData, BufferFactory bufferFactory, int port) throws IOException {
         super(networkData, bufferFactory, port);
         this.executor = scheduledExecutorService;
+        this.exec = new ScheduledExec(){
+            @Override
+            public void run(Runnable runnable, long delay) {
+                executor.schedule(runnable, delay, TimeUnit.MILLISECONDS);
+            }
+
+            @Override
+            public void run(Runnable runnable, long delay, TimeUnit period) {
+                executor.schedule(runnable, delay, period);
+            }
+
+            @Override
+            public void runDeferred(Runnable runnable) {
+                executor.execute(runnable);
+            }
+        };
 
         this.tcpServer = new TCPServer(getPort());
         this.udpSide = new UDPSocket();
@@ -63,7 +81,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                             synchronized (channelSet.getLock()) {
                                 channel = channelSet.get(address.getAddress().getAddress(), port);
                                 if (channel == null) {
-                                    channel = new JavaServerChannel(executor, this, address, getBufferFactory());
+                                    channel = new JavaServerChannel(exec, this, address, getBufferFactory());
                                     channel.connect(socket);
                                     if (!addChannel(channel)) {
                                         try {
@@ -256,7 +274,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                 synchronized (channelSet.getLock()) {
                     channel = channelSet.get(packet.getAddress().getAddress(), packet.getPort());
                     if (channel == null) {
-                        channel = new JavaServerChannel(executor, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
+                        channel = new JavaServerChannel(exec, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
                         if (!addChannel(channel)) continue;
                         channel.startUDP().perform();
                     }

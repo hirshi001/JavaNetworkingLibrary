@@ -12,6 +12,7 @@ import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.client.ClientOption;
 import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
+import com.hirshi001.restapi.ScheduledExec;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -32,9 +33,12 @@ public class JavaClientChannel extends BaseChannel {
     private ScheduledFuture<?> tcpFuture, udpFuture;
     private final Object tcpLock = new Object(), udpLock = new Object(), connectLock = new Object();
 
+    private ScheduledExecutorService executor;
 
-    public JavaClientChannel(ScheduledExecutorService executor, Client client, InetSocketAddress address, BufferFactory bufferFactory) {
-        super(client, executor);
+
+    public JavaClientChannel(ScheduledExec exec, ScheduledExecutorService executor, Client client, InetSocketAddress address, BufferFactory bufferFactory) {
+        super(client, exec);
+        this.executor = executor;
         this.address = address;
         this.bufferFactory = bufferFactory;
 
@@ -153,7 +157,7 @@ public class JavaClientChannel extends BaseChannel {
 
             if (delay >= 0) {
                 if (delay == 0) delay = 1; // minimum delay of 1 ms
-                tcpFuture = getExecutor().scheduleWithFixedDelay(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
+                tcpFuture = executor.scheduleWithFixedDelay(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
@@ -200,7 +204,7 @@ public class JavaClientChannel extends BaseChannel {
             if (delay == null) delay = 0;
             if (delay >= 0) {
                 if (delay == 0) delay = 1; // minimum delay of 1 ms
-                udpFuture = getExecutor().scheduleWithFixedDelay(this::checkUDPPackets, 0, delay, TimeUnit.MILLISECONDS);
+                udpFuture = executor.scheduleWithFixedDelay(this::checkUDPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }

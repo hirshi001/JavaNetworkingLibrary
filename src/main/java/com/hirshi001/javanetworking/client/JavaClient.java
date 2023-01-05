@@ -11,6 +11,7 @@ import com.hirshi001.networking.network.server.ServerListener;
 import com.hirshi001.networking.networkdata.NetworkData;
 import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
+import com.hirshi001.restapi.ScheduledExec;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -18,11 +19,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class JavaClient extends BaseClient {
 
     JavaClientChannel channel;
     ScheduledExecutorService executor;
+    ScheduledExec exec;
     private final Object lock = new Object();
 
     private final Map<ClientOption, Object> optionObjectMap;
@@ -30,6 +33,22 @@ public class JavaClient extends BaseClient {
     public JavaClient(NetworkData networkData, BufferFactory bufferFactory, String host, int port, ScheduledExecutorService executor) {
         super(networkData, bufferFactory, host, port);
         this.executor = executor;
+        this.exec = new ScheduledExec(){
+            @Override
+            public void run(Runnable runnable, long delay) {
+                executor.schedule(runnable, delay, TimeUnit.MILLISECONDS);
+            }
+
+            @Override
+            public void run(Runnable runnable, long delay, TimeUnit period) {
+                executor.schedule(runnable, delay, period);
+            }
+
+            @Override
+            public void runDeferred(Runnable runnable) {
+                executor.execute(runnable);
+            }
+        };
         optionObjectMap = new HashMap<>();
     }
 
@@ -125,7 +144,7 @@ public class JavaClient extends BaseClient {
     private void createChannelIfNull(){
         synchronized (lock){
             if(channel==null){
-                channel = new JavaClientChannel(executor, this, new InetSocketAddress(getHost(), getPort()), getBufferFactory());
+                channel = new JavaClientChannel(exec, executor, this, new InetSocketAddress(getHost(), getPort()), getBufferFactory());
                 if(channelInitializer!=null)channelInitializer.initChannel(channel);
             }
         }

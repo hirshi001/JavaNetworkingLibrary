@@ -8,6 +8,7 @@ import com.hirshi001.networking.network.channel.Channel;
 import com.hirshi001.networking.network.channel.ChannelOption;
 import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
+import com.hirshi001.restapi.ScheduledExec;
 
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
@@ -31,7 +32,7 @@ public class JavaServerChannel extends BaseChannel {
     public long lastReceived = 0;
 
 
-    public JavaServerChannel(ScheduledExecutorService executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory) {
+    public JavaServerChannel(ScheduledExec executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory) {
         super(server, executor);
         this.address = address;
         this.tcpSide = new TCPSocket(bufferFactory);
