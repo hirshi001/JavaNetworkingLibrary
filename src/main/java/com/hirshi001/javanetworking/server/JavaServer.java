@@ -37,6 +37,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
 
     private final Map<ServerOption, Object> options = new ConcurrentHashMap<>();
 
+
     public JavaServer(ScheduledExecutorService scheduledExecutorService, NetworkData networkData, BufferFactory bufferFactory, int port) throws IOException {
         super(networkData, bufferFactory, port);
         this.executor = scheduledExecutorService;
@@ -90,7 +91,9 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                                             e.printStackTrace();
                                         }
                                     }
-                                } else channel.connect(socket);
+                                } else {
+                                    channel.connect(socket);
+                                }
                             }
                         });
                         isTCPClosed.set(false);
@@ -315,9 +318,10 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
         }
     }
 
+
     @Override
-    public boolean isOpen() {
-        return tcpOpen() || udpOpen();
+    public ScheduledExec getExecutor() {
+        return exec;
     }
 
     @Override

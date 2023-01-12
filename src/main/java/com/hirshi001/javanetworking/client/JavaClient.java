@@ -102,6 +102,11 @@ public class JavaClient extends BaseClient {
     }
 
     @Override
+    public ScheduledExec getExecutor() {
+        return exec;
+    }
+
+    @Override
     public RestFuture<?, Client> startTCP() {
         return RestAPI.create((future, inputNull)->{
             createChannelIfNull();
