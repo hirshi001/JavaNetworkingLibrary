@@ -51,8 +51,10 @@ public class UDPSocket {
 
     public void send(com.hirshi001.buffer.buffers.ByteBuffer buffer, InetSocketAddress address)  {
         synchronized (sendBufferLock) {
-            int size =  buffer.readBytes(sendBuffer);
-            send(sendBuffer, 0, size, address);
+            while(buffer.readableBytes()>0) {
+                int size = buffer.readBytes(sendBuffer);
+                send(sendBuffer, 0, size, address);
+            }
         }
     }
 

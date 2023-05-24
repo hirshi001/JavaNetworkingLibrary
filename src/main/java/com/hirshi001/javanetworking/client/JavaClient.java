@@ -24,32 +24,15 @@ import java.util.concurrent.TimeUnit;
 public class JavaClient extends BaseClient {
 
     JavaClientChannel channel;
-    ScheduledExecutorService executor;
-    ScheduledExec exec;
     private final Object lock = new Object();
 
-    private final Map<ClientOption, Object> optionObjectMap;
+    public JavaClient(ScheduledExec exec, NetworkData networkData, BufferFactory bufferFactory, String host, int port) {
+        super(exec, networkData, bufferFactory, host, port);
+    }
 
-    public JavaClient(NetworkData networkData, BufferFactory bufferFactory, String host, int port, ScheduledExecutorService executor) {
-        super(networkData, bufferFactory, host, port);
-        this.executor = executor;
-        this.exec = new ScheduledExec(){
-            @Override
-            public void run(Runnable runnable, long delay) {
-                executor.schedule(runnable, delay, TimeUnit.MILLISECONDS);
-            }
-
-            @Override
-            public void run(Runnable runnable, long delay, TimeUnit period) {
-                executor.schedule(runnable, delay, period);
-            }
-
-            @Override
-            public void runDeferred(Runnable runnable) {
-                executor.execute(runnable);
-            }
-        };
-        optionObjectMap = new HashMap<>();
+    @Override
+    protected void setReceiveBufferSize(int size) {
+        if(channel!=null) channel.udpSide.udpReceiveBufferSize(size);
     }
 
     @Override
@@ -58,52 +41,18 @@ public class JavaClient extends BaseClient {
     }
 
     @Override
-    public <T> void setClientOption(ClientOption<T> option, T value) {
-        optionObjectMap.put(option, value);
-        activateClientOption(option, value);
-    }
-
-    @Override
-    public <T> T getClientOption(ClientOption<T> option) {
-        return (T) optionObjectMap.get(option);
-    }
-
-    protected <T> void activateClientOption(ClientOption<T> option, T value){
-        if(option==ClientOption.UDP_PACKET_CHECK_INTERVAL){
-            channel.scheduleUDP();
-        }
-        if(option==ClientOption.TCP_PACKET_CHECK_INTERVAL){
-            channel.scheduleTCP();
-        }
-    }
-
-    public ChannelListener getClientListenerHandler(){
-        return clientListenerHandler;
-    }
-
-    @Override
     public boolean isClosed() {
         return channel.isClosed();
     }
 
     @Override
-    public boolean tcpOpen() {
-        return getChannel().isTCPOpen();
+    public boolean supportsTCP() {
+        return true;
     }
 
     @Override
-    public boolean udpOpen() {
-        return getChannel().isUDPOpen();
-    }
-
-    @Override
-    public boolean isOpen() {
-        return getChannel().isOpen();
-    }
-
-    @Override
-    public ScheduledExec getExecutor() {
-        return exec;
+    public boolean supportsUDP() {
+        return true;
     }
 
     @Override
@@ -149,8 +98,8 @@ public class JavaClient extends BaseClient {
     private void createChannelIfNull(){
         synchronized (lock){
             if(channel==null){
-                channel = new JavaClientChannel(exec, executor, this, new InetSocketAddress(getHost(), getPort()), getBufferFactory());
-                if(channelInitializer!=null)channelInitializer.initChannel(channel);
+                channel = new JavaClientChannel(exec, getExecutor(), this, new InetSocketAddress(getHost(), getPort()), getBufferFactory());
+                if(channelInitializer!=null) channelInitializer.initChannel(channel);
             }
         }
     }

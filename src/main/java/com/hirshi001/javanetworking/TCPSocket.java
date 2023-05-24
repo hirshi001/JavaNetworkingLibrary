@@ -87,7 +87,7 @@ public class TCPSocket {
         }
     }
 
-    public void writeAndFlush(ByteBuffer buffer){
+    public void writeAndFlush(ByteBuffer buffer) {
         if (buffer.hasArray()) {
             writeData(buffer.array(), buffer.readerIndex(), buffer.readableBytes());
         } else if (buffer instanceof CircularArrayBackedByteBuffer) {

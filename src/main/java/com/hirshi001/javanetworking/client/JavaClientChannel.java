@@ -2,7 +2,6 @@ package com.hirshi001.javanetworking.client;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
 import com.hirshi001.buffer.buffers.ByteBuffer;
-import com.hirshi001.buffer.buffers.CircularArrayBackedByteBuffer;
 import com.hirshi001.javanetworking.TCPSocket;
 import com.hirshi001.javanetworking.UDPSocket;
 import com.hirshi001.networking.network.channel.BaseChannel;
@@ -13,13 +12,12 @@ import com.hirshi001.networking.network.client.ClientOption;
 import com.hirshi001.restapi.RestAPI;
 import com.hirshi001.restapi.RestFuture;
 import com.hirshi001.restapi.ScheduledExec;
+import com.hirshi001.restapi.TimerAction;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class JavaClientChannel extends BaseChannel {
@@ -30,13 +28,13 @@ public class JavaClientChannel extends BaseChannel {
     final BufferFactory bufferFactory;
 
     int localPort = 0;
-    private ScheduledFuture<?> tcpFuture, udpFuture;
+    private TimerAction tcpFuture, udpFuture;
     private final Object tcpLock = new Object(), udpLock = new Object(), connectLock = new Object();
 
-    private ScheduledExecutorService executor;
+    private ScheduledExec executor;
 
 
-    public JavaClientChannel(ScheduledExec exec, ScheduledExecutorService executor, Client client, InetSocketAddress address, BufferFactory bufferFactory) {
+    public JavaClientChannel(ScheduledExec exec, ScheduledExec executor, Client client, InetSocketAddress address, BufferFactory bufferFactory) {
         super(client, exec);
         this.executor = executor;
         this.address = address;
@@ -69,6 +67,7 @@ public class JavaClientChannel extends BaseChannel {
                 break;
             }
         }
+        super.checkUDPPackets();
     }
 
     @Override
@@ -76,14 +75,6 @@ public class JavaClientChannel extends BaseChannel {
         boolean success = super.activateOption(option, value);
         udpSide.setOption(option, value);
         tcpSide.setOption(option, value);
-        if (option == ChannelOption.UDP_RECEIVE_BUFFER_SIZE) {
-            udpSide.udpReceiveBufferSize((Integer) value);
-            return true;
-        }
-        else if (option==ChannelOption.MAX_UDP_PAYLOAD_SIZE) {
-            udpSide.setSendBufferSize((Integer) value);
-            return true;
-        }
         return success;
     }
 
@@ -96,6 +87,7 @@ public class JavaClientChannel extends BaseChannel {
             ByteBuffer buffer = tcpSide.getData();
             onTCPBytesReceived(buffer);
         }
+        super.checkTCPPackets();
     }
 
     @Override
@@ -140,6 +132,7 @@ public class JavaClientChannel extends BaseChannel {
                 localPort = tcpSide.getLocalPort();
                 scheduleTCP();
             }
+            onTCPConnected();
             getListenerHandler().onTCPConnect(this);
             return this;
         });
@@ -149,7 +142,7 @@ public class JavaClientChannel extends BaseChannel {
         synchronized (tcpLock) {
             if (!isTCPOpen()) return;
             if (tcpFuture != null) {
-                tcpFuture.cancel(false);
+                tcpFuture.cancel();
             }
 
             Integer delay = getSide().getClientOption(ClientOption.TCP_PACKET_CHECK_INTERVAL);
@@ -157,7 +150,7 @@ public class JavaClientChannel extends BaseChannel {
 
             if (delay >= 0) {
                 if (delay == 0) delay = 1; // minimum delay of 1 ms
-                tcpFuture = executor.scheduleWithFixedDelay(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
+                tcpFuture = executor.repeat(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
@@ -169,12 +162,10 @@ public class JavaClientChannel extends BaseChannel {
                 if (isTCPClosed()) return this;
                 tcpSide.disconnect();
                 if (tcpFuture != null) {
-                    tcpFuture.cancel(true);
+                    tcpFuture.cancel();
+                    tcpFuture = null;
                 }
-                if (isTCPClosed() && isUDPClosed()) {
-                    close().perform();
-                }
-                getListenerHandler().onTCPDisconnect(this);
+                onTCPDisconnected();
                 return this;
             }
         });
@@ -188,7 +179,7 @@ public class JavaClientChannel extends BaseChannel {
                 localPort = udpSide.getLocalPort();
                 scheduleUDP();
             }
-            getListenerHandler().onUDPStart(this);
+            onUDPStart();
             return this;
         });
     }
@@ -197,18 +188,18 @@ public class JavaClientChannel extends BaseChannel {
         synchronized (udpLock) {
             if (!isUDPOpen()) return;
             if (udpFuture != null) {
-                udpFuture.cancel(true);
+                udpFuture.cancel();
             }
 
             Integer delay = getSide().getClientOption(ClientOption.UDP_PACKET_CHECK_INTERVAL);
             if (delay == null) delay = 0;
+
             if (delay >= 0) {
                 if (delay == 0) delay = 1; // minimum delay of 1 ms
-                udpFuture = executor.scheduleWithFixedDelay(this::checkUDPPackets, 0, delay, TimeUnit.MILLISECONDS);
+                udpFuture = executor.repeat(this::checkUDPPackets, 0, delay, TimeUnit.MILLISECONDS);
             }
         }
     }
-
 
     @Override
     public RestFuture<?, Channel> stopUDP() {
@@ -216,14 +207,14 @@ public class JavaClientChannel extends BaseChannel {
             synchronized (udpLock) {
                 if (isUDPClosed()) return this;
                 if (udpFuture != null) {
-                    udpFuture.cancel(false);
+                    udpFuture.cancel();
                     udpFuture = null;
                 }
                 udpSide.close();
                 if (isTCPClosed() && isUDPClosed()) {
                     close().perform();
                 }
-                getListenerHandler().onUDPStop(this);
+                onUDPStop();
                 return this;
             }
         });

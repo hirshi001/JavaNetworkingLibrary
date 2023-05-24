@@ -17,15 +17,12 @@ public class JavaServerChannel extends BaseChannel {
 
 
     final TCPSocket tcpSide;
-    final AtomicBoolean udpClosed = new AtomicBoolean(false);
+    final AtomicBoolean udpClosed = new AtomicBoolean(true);
     private final InetSocketAddress address;
     private final BufferFactory bufferFactory;
 
-    public long lastTCPReceived = 0;
     public boolean lastTCPReceivedValid = false;
-    public long lastUDPReceived = 0;
     public boolean lastUDPReceivedValid = false;
-    public long lastReceived = 0;
 
 
     public JavaServerChannel(ScheduledExec executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory) {
@@ -38,7 +35,7 @@ public class JavaServerChannel extends BaseChannel {
     public void connect(Socket socket) {
         tcpSide.connect(socket);
         lastTCPReceivedValid = true;
-        lastTCPReceived = lastReceived = System.nanoTime();
+        onTCPConnected();
     }
 
     public boolean checkNewTCPData() {
@@ -97,6 +94,7 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> startTCP() {
         return RestAPI.create(() -> {
             throw new UnsupportedOperationException("Cannot open TCP on the Server side");
+            // see the connect method
         });
     }
 
@@ -106,6 +104,7 @@ public class JavaServerChannel extends BaseChannel {
             if (tcpSide.isClosed()) return this;
             lastTCPReceivedValid = false;
             tcpSide.disconnect();
+            onTCPDisconnected();
             return this;
         });
     }
@@ -116,6 +115,7 @@ public class JavaServerChannel extends BaseChannel {
             udpClosed.set(false);
             lastUDPReceivedValid = true;
             lastUDPReceived = lastReceived = System.nanoTime();
+            onUDPStart();
             return this;
         });
     }
@@ -126,6 +126,7 @@ public class JavaServerChannel extends BaseChannel {
             if (isUDPClosed()) return this;
             lastUDPReceivedValid = false;
             udpClosed.set(true);
+            onUDPStop();
             return this;
         });
     }

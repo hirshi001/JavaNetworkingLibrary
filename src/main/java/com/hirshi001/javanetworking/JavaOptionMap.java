@@ -22,7 +22,7 @@ public class JavaOptionMap {
     public static final Map<ChannelOption, DatagramSocketOptionConsumer> DATAGRAM_SOCKET_OPTION_MAP = new HashMap<ChannelOption, DatagramSocketOptionConsumer>(){{
         put(ChannelOption.UDP_SO_TIMEOUT, (datagramSocket, value) -> datagramSocket.setSoTimeout((Integer) value));
         put(ChannelOption.UDP_REUSE_ADDRESS, (datagramSocket, value) -> datagramSocket.setReuseAddress((Boolean) value));
-        put(ChannelOption.UDP_RECEIVE_BUFFER_SIZE, (datagramSocket, value) -> datagramSocket.setReceiveBufferSize((Integer) value));
+        put(ChannelOption.MAX_UDP_PACKET_SIZE, (datagramSocket, value) -> datagramSocket.setReceiveBufferSize((Integer) value));
         put(ChannelOption.UDP_TRAFFIC_CLASS, (datagramSocket, value) -> datagramSocket.setTrafficClass((Integer) value));
     }};
 

@@ -107,7 +107,7 @@ public class JavaTest {
                 serverChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.TCP_KEEP_ALIVE, true);
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
-                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toMillis(2));
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toNanos(2));
             }
         });
         server.addServerListener(new AbstractServerListener() {
@@ -145,9 +145,10 @@ public class JavaTest {
                 clientChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.TCP_KEEP_ALIVE, true);
                 channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toNanos(2));
             }
         });
-        client.addClientListener(new AbstractChannelListener() {
+        client.addClientListeners(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 clientListenerReceived.incrementAndGet();
@@ -175,6 +176,7 @@ public class JavaTest {
             Thread.sleep(100);
             assertFalse(clientDisconnectListener.get(), "Client disconnected at i=" + i);
         }
+
         Thread.sleep(1500);
         assertTrue(clientDisconnectListener.get());
 
@@ -190,7 +192,7 @@ public class JavaTest {
         assertEquals(packetCount, counter.get());
 
 
-        client.close();
+        client.close().perform();
 
         assertTrue(client.isClosed());
         assertTrue(client.getChannel().isUDPClosed());
@@ -204,8 +206,6 @@ public class JavaTest {
             assertTrue(channel.isUDPClosed());
             assertTrue(channel.isTCPClosed());
         }
-
-
     }
 
     @Test
@@ -233,6 +233,7 @@ public class JavaTest {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 serverListenerReceived.incrementAndGet();
+
             }
 
             @Override
@@ -255,7 +256,7 @@ public class JavaTest {
             public void initChannel(Channel channel) {
                 serverChannelInitialized.set(true);
                 channel.setChannelOption(ChannelOption.UDP_AUTO_FLUSH, true);
-                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toMillis(2));
+                channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toNanos(2));
             }
         });
         server.startTCP().perform().get(); // check for disconnect
@@ -267,7 +268,7 @@ public class JavaTest {
                 registerDefaultPrimitivePackets().
                 register(new PacketHolder<>(IntegerPacket::new, null, IntegerPacket.class), 0);
         client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
-        client.addClientListener(new AbstractChannelListener() {
+        client.addClientListeners(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 clientListenerReceived.incrementAndGet();
@@ -315,8 +316,8 @@ public class JavaTest {
         assertEquals(packetCount, clientListenerSent.get());
 
 
-        server.close();
-        client.close();
+        server.close().perform();
+        client.close().perform();
 
     }
 
@@ -389,7 +390,7 @@ public class JavaTest {
         client.setChannelInitializer(channel -> {
             channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
         });
-        client.addClientListener(new AbstractChannelListener() {
+        client.addClientListeners(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 received.set(true);
@@ -425,7 +426,7 @@ public class JavaTest {
 
         clientNetworkData.getPacketRegistryContainer().getDefaultRegistry().registerDefaultPrimitivePackets();
         client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
-        client.addClientListener(new AbstractChannelListener() {
+        client.addClientListeners(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 StringPacket packet = (StringPacket) context.packet;
