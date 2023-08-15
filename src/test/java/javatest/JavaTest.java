@@ -4,11 +4,14 @@ import com.hirshi001.buffer.bufferfactory.BufferFactory;
 import com.hirshi001.buffer.bufferfactory.DefaultBufferFactory;
 import com.hirshi001.buffer.byteorder.ByteOrder;
 import com.hirshi001.javanetworking.JavaNetworkFactory;
-import com.hirshi001.javanetworking.server.JavaServerChannel;
 import com.hirshi001.javarestapi.JavaRestFutureFactory;
 import com.hirshi001.networking.network.NetworkFactory;
-import com.hirshi001.networking.network.channel.*;
+import com.hirshi001.networking.network.channel.AbstractChannelListener;
+import com.hirshi001.networking.network.channel.Channel;
+import com.hirshi001.networking.network.channel.ChannelInitializer;
+import com.hirshi001.networking.network.channel.ChannelOption;
 import com.hirshi001.networking.network.client.Client;
+import com.hirshi001.networking.network.client.ClientOption;
 import com.hirshi001.networking.network.server.AbstractServerListener;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.network.server.ServerOption;
@@ -23,9 +26,6 @@ import com.hirshi001.networking.packethandlercontext.PacketHandlerContext;
 import com.hirshi001.networking.packethandlercontext.PacketType;
 import com.hirshi001.networking.packetregistrycontainer.MultiPacketRegistryContainer;
 import com.hirshi001.networking.packetregistrycontainer.PacketRegistryContainer;
-import com.hirshi001.networking.util.defaultpackets.arraypackets.ByteArrayPacket;
-import com.hirshi001.networking.util.defaultpackets.arraypackets.CharArrayPacket;
-import com.hirshi001.networking.util.defaultpackets.arraypackets.DoubleArrayPacket;
 import com.hirshi001.networking.util.defaultpackets.arraypackets.IntegerArrayPacket;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.IntegerPacket;
 import com.hirshi001.networking.util.defaultpackets.primitivepackets.StringPacket;
@@ -37,7 +37,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Arrays;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -110,6 +109,7 @@ public class JavaTest {
                 channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toNanos(2));
             }
         });
+        server.setServerOption(ServerOption.TCP_PACKET_CHECK_INTERVAL, 100);
         server.addServerListener(new AbstractServerListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
@@ -131,6 +131,7 @@ public class JavaTest {
                 clientDisconnectListener.set(true);
             }
         });
+
         server.startTCP().perform().get();
 
 
@@ -148,6 +149,7 @@ public class JavaTest {
                 channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toNanos(2));
             }
         });
+        client.setClientOption(ClientOption.TCP_PACKET_CHECK_INTERVAL, 100);
         client.addClientListeners(new AbstractChannelListener() {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
@@ -170,6 +172,7 @@ public class JavaTest {
                     perform();
 
         }
+
 
 
         for (int i = 0; i < 15; i++) {
@@ -259,6 +262,7 @@ public class JavaTest {
                 channel.setChannelOption(ChannelOption.PACKET_TIMEOUT, TimeUnit.SECONDS.toNanos(2));
             }
         });
+        server.setServerOption(ServerOption.UDP_PACKET_CHECK_INTERVAL, 100);
         server.startTCP().perform().get(); // check for disconnect
         server.startUDP().perform().get();
 
@@ -287,6 +291,7 @@ public class JavaTest {
                 channel.setChannelOption(ChannelOption.UDP_AUTO_FLUSH, true);
             }
         });
+        client.setClientOption(ClientOption.UDP_PACKET_CHECK_INTERVAL, 100);
         client.startTCP().perform().get();
         client.startUDP().perform().get();
 

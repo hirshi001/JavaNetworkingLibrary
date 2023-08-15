@@ -1,3 +1,18 @@
+/*
+ * Copyright 2023 Hrishikesh Ingle
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.hirshi001.javanetworking.server;
 
 import com.hirshi001.buffer.bufferfactory.BufferFactory;
@@ -21,9 +36,6 @@ public class JavaServerChannel extends BaseChannel {
     private final InetSocketAddress address;
     private final BufferFactory bufferFactory;
 
-    public boolean lastTCPReceivedValid = false;
-    public boolean lastUDPReceivedValid = false;
-
 
     public JavaServerChannel(ScheduledExec executor, JavaServer server, InetSocketAddress address, BufferFactory bufferFactory) {
         super(server, executor);
@@ -34,15 +46,18 @@ public class JavaServerChannel extends BaseChannel {
 
     public void connect(Socket socket) {
         tcpSide.connect(socket);
-        lastTCPReceivedValid = true;
         onTCPConnected();
     }
 
     public boolean checkNewTCPData() {
-        if (tcpSide.newDataAvailable()) {
-            ByteBuffer buffer = tcpSide.getData();
-            onTCPBytesReceived(buffer);
-            return true;
+        try {
+            if (tcpSide.newDataAvailable()) {
+                ByteBuffer buffer = tcpSide.getData();
+                onTCPBytesReceived(buffer);
+                return true;
+            }
+        }catch (Exception e){
+            stopTCP().perform();
         }
         return false;
     }
@@ -102,7 +117,6 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> stopTCP() {
         return RestAPI.create(() -> {
             if (tcpSide.isClosed()) return this;
-            lastTCPReceivedValid = false;
             tcpSide.disconnect();
             onTCPDisconnected();
             return this;
@@ -113,7 +127,6 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> startUDP() {
         return RestAPI.create(() -> {
             udpClosed.set(false);
-            lastUDPReceivedValid = true;
             lastUDPReceived = lastReceived = System.nanoTime();
             onUDPStart();
             return this;
@@ -124,7 +137,6 @@ public class JavaServerChannel extends BaseChannel {
     public RestFuture<?, Channel> stopUDP() {
         return RestAPI.create(() -> {
             if (isUDPClosed()) return this;
-            lastUDPReceivedValid = false;
             udpClosed.set(true);
             onUDPStop();
             return this;
@@ -143,7 +155,7 @@ public class JavaServerChannel extends BaseChannel {
 
     @Override
     public void checkUDPPackets() {
-        getSide().checkUDPPackets();
+        super.checkUDPPackets();
     }
 
     @Override
@@ -153,6 +165,7 @@ public class JavaServerChannel extends BaseChannel {
             lastTCPReceived = now;
             lastReceived = now;
         }
+        super.checkTCPPackets();
     }
 
     @Override
