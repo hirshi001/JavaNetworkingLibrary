@@ -73,14 +73,18 @@ public class JavaClientChannel extends BaseChannel {
 
     @Override
     public void checkUDPPackets() {
-        DatagramPacket packet;
-        while (true) {
-            try {
-                packet = udpSide.receive();
-                if (packet == null) break;
-                onUDPPacketsReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
-            } catch (IOException e) {
-                break;
+        if(!udpSide.isConnected()){
+            stopUDP().perform();
+        }else {
+            DatagramPacket packet;
+            while (true) {
+                try {
+                    packet = udpSide.receive();
+                    if (packet == null) break;
+                    onUDPPacketsReceived(bufferFactory.wrap(packet.getData(), packet.getOffset(), packet.getLength()));
+                } catch (IOException e) {
+                    break;
+                }
             }
         }
         super.checkUDPPackets();
