@@ -22,6 +22,7 @@ import com.hirshi001.javanetworking.UDPSocket;
 import com.hirshi001.networking.network.channel.BaseChannel;
 import com.hirshi001.networking.network.channel.Channel;
 import com.hirshi001.networking.network.channel.ChannelOption;
+import com.hirshi001.networking.network.client.BaseClient;
 import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.client.ClientOption;
 import com.hirshi001.restapi.RestAPI;
@@ -150,7 +151,6 @@ public class JavaClientChannel extends BaseChannel {
                 Socket socket = new Socket(address.getAddress(), address.getPort(), null, localPort);
                 tcpSide.connect(socket);
                 localPort = tcpSide.getLocalPort();
-                scheduleTCP();
             }
             onTCPConnected();
             getListenerHandler().onTCPConnect(this);
@@ -158,22 +158,6 @@ public class JavaClientChannel extends BaseChannel {
         });
     }
 
-    void scheduleTCP() {
-        synchronized (tcpLock) {
-            if (!isTCPOpen()) return;
-            if (tcpFuture != null) {
-                tcpFuture.cancel();
-            }
-
-            Integer delay = getSide().getClientOption(ClientOption.TCP_PACKET_CHECK_INTERVAL);
-            if (delay == null) delay = 0;
-
-            if (delay >= 0) {
-                if (delay == 0) delay = 1; // minimum delay of 1 ms
-                tcpFuture = executor.repeat(this::checkTCPPackets, 0, delay, TimeUnit.MILLISECONDS);
-            }
-        }
-    }
 
     @Override
     public RestFuture<?, Channel> stopTCP() {

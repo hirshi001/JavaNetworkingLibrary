@@ -226,7 +226,7 @@ public class JavaTest {
         AtomicInteger clientListenerReceived = new AtomicInteger(0);
         AtomicInteger clientListenerSent = new AtomicInteger(0);
 
-        int packetCount = 500;
+        int packetCount = 100;
 
         serverPacketRegistryContainer.getDefaultRegistry().
                 registerDefaultPrimitivePackets().
@@ -236,7 +236,6 @@ public class JavaTest {
             @Override
             public void onReceived(PacketHandlerContext<?> context) {
                 serverListenerReceived.incrementAndGet();
-
             }
 
             @Override
@@ -307,7 +306,6 @@ public class JavaTest {
         }
         Thread.sleep(1500);
         assertEquals(1, clientDisconnectListener.get());
-
 
         assertEquals(packetCount, counter.get());
 

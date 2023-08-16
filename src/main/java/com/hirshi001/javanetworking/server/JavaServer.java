@@ -74,6 +74,9 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                 }
                 tcpServerFuture = executor.submit(() -> {
                     try {
+                        tcpServer.connect();
+                        isTCPClosed.set(false);
+                        onTCPServerStart();
                         tcpServer.start((socket) -> {
                             int port = socket.getPort();
                             InetSocketAddress address = (InetSocketAddress) socket.getRemoteSocketAddress();
@@ -91,6 +94,9 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                                         e.printStackTrace();
                                     }
                                 }
+                                if(udpOpen()) {
+                                    channel.startUDP().perform();
+                                }
                             } else {
                                 channel.connect(socket);
                             }
@@ -101,7 +107,7 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                         e.printStackTrace();
                     }
                 });
-                onTCPServerStart();
+
             }
             return this;
         });
@@ -116,6 +122,9 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
             synchronized (udpLock) {
                 udpSide.connect(getPort());
                 isUDPClosed.set(false);
+            }
+            for(JavaServerChannel channel : channelSet){
+                channel.startUDP();
             }
             onUDPServerStart();
             return this;
@@ -214,11 +223,8 @@ public class JavaServer extends BaseServer<JavaServerChannel> {
                 if (channel == null) {
                     channel = new JavaServerChannel(exec, this, (InetSocketAddress) packet.getSocketAddress(), getBufferFactory());
                     if (!addChannel(channel)) continue;
-                }
-                if(channel.isUDPClosed()){
                     channel.startUDP().perform();
                 }
-
                 channel.udpPacketReceived(packet.getData(), packet.getLength(), now);
             } catch (IOException e) {
                 e.printStackTrace();

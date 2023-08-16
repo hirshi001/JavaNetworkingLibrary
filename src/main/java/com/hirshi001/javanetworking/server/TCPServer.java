@@ -29,8 +29,11 @@ public class TCPServer {
         this.port = port;
     }
 
-    public void start(Consumer<Socket> callback) throws IOException {
+    public void connect() throws IOException{
         serverSocket = new ServerSocket(port);
+    }
+
+    public void start(Consumer<Socket> callback) throws IOException {
         while (true) {
             Socket socket = serverSocket.accept();
             callback.accept(socket);

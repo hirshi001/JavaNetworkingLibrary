@@ -77,7 +77,9 @@ public class JavaClient extends BaseClient {
             if(!channel.supportsTCP()){
                 future.setCause(new UnsupportedOperationException("TCP is not supported on this client"));
             }else{
-                channel.startTCP().onFailure(future::setCause).then(n-> future.taskFinished(JavaClient.this)).perform();
+                channel.startTCP().onFailure(future::setCause).then(n-> {
+                    future.taskFinished(JavaClient.this);
+                }).perform();
             }
         });
     }

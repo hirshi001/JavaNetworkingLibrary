@@ -63,6 +63,7 @@ public class JavaServerChannel extends BaseChannel {
     }
 
     public void udpPacketReceived(byte[] bytes, int length, long time) {
+        if(isUDPClosed()) return;
         lastUDPReceived = time;
         lastReceived = time;
         onUDPPacketsReceived(bufferFactory.wrap(bytes, 0, length));
