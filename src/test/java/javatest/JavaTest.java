@@ -12,6 +12,7 @@ import com.hirshi001.networking.network.channel.ChannelInitializer;
 import com.hirshi001.networking.network.channel.ChannelOption;
 import com.hirshi001.networking.network.client.Client;
 import com.hirshi001.networking.network.client.ClientOption;
+import com.hirshi001.networking.network.networkcondition.NetworkCondition;
 import com.hirshi001.networking.network.server.AbstractServerListener;
 import com.hirshi001.networking.network.server.Server;
 import com.hirshi001.networking.network.server.ServerOption;
@@ -40,6 +41,7 @@ import java.net.Socket;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -76,6 +78,11 @@ public class JavaTest {
 
         clientPacketRegistryContainer = new MultiPacketRegistryContainer();
         clientNetworkData = new DefaultNetworkData(packetEncoderDecoder, clientPacketRegistryContainer);
+        try{
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     @Test
@@ -407,6 +414,7 @@ public class JavaTest {
         assertTrue(received.get());
     }
 
+    // NOTE: DataPackets are not fully implemented yet in the  BetterNetworkingLibrary, so this test will fail
     @Test
     public void dataPacketTest() throws IOException, ExecutionException, InterruptedException {
         serverNetworkData.getPacketRegistryContainer().getDefaultRegistry().registerDefaultPrimitivePackets();
@@ -441,6 +449,120 @@ public class JavaTest {
         Thread.sleep(1000);
 
         assertTrue(received.get());
+
+    }
+
+    @Test
+    public void networkConditionTestUDP() throws IOException, ExecutionException, InterruptedException {
+        serverPacketRegistryContainer.getDefaultRegistry().registerDefaultPrimitivePackets();
+        server = networkFactory.createServer(serverNetworkData, bufferFactory, 1234);
+        AtomicInteger receiveCount = new AtomicInteger(0);
+        final AtomicLong firstSend = new AtomicLong(0); // time in milliseconds of first packet sent by client
+        final AtomicBoolean first = new AtomicBoolean(true); // checks if the first packet arrived is too early
+        server.setChannelInitializer(channel -> {
+            channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+            channel.addChannelListener(new AbstractChannelListener() {
+                @Override
+                public void onUDPReceived(PacketHandlerContext<?> context) {
+                    long receiveTime = System.currentTimeMillis();
+                    if(receiveTime - firstSend.get() < 4950) {
+                        first.set(false);
+                        System.out.println("Received too early: " + (receiveTime - firstSend.get()));
+                    }
+                    System.out.println("Received: " + ((IntegerPacket)context.packet).value);
+                    receiveCount.incrementAndGet();
+                }
+            });
+        });
+        server.setServerOption(ServerOption.UDP_PACKET_CHECK_INTERVAL, 10);
+
+        server.startTCP().perform().get();
+        server.startUDP().perform().get();
+
+        clientPacketRegistryContainer.getDefaultRegistry().registerDefaultPrimitivePackets();
+        client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
+        client.setChannelInitializer(channel -> {
+            channel.setChannelOption(ChannelOption.UDP_AUTO_FLUSH, true);
+
+            NetworkCondition condition = channel.getNetworkCondition();
+            condition.sendLatencySpeed = 5F;
+            condition.sendPacketLossRate = 0.50D;
+            condition.sendPacketLossStandardDeviation = 0.2D;
+            channel.enableNetworkCondition(true);
+        });
+
+
+
+        client.startTCP().perform().get();
+        client.startUDP().perform().get();
+
+        firstSend.set(System.currentTimeMillis());
+        for(int i = 0; i < 100; i++) {
+            client.getChannel().sendUDP(new IntegerPacket(i), null).perform();
+        }
+
+        Thread.sleep(10000);
+        System.out.println("Received: " + receiveCount.get());
+        assertTrue(receiveCount.get() > 25);
+        assertTrue(first.get());
+
+
+    }
+
+
+    @Test
+    public void networkConditionTestTCP() throws IOException, ExecutionException, InterruptedException {
+        serverPacketRegistryContainer.getDefaultRegistry().registerDefaultPrimitivePackets();
+        server = networkFactory.createServer(serverNetworkData, bufferFactory, 1234);
+        AtomicInteger receiveCount = new AtomicInteger(0);
+        final AtomicLong firstSend = new AtomicLong(0); // time in milliseconds of first packet sent by client
+        final AtomicBoolean first = new AtomicBoolean(true); // checks if the first packet arrived is too early
+        server.setChannelInitializer(channel -> {
+            channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+            channel.addChannelListener(new AbstractChannelListener() {
+                @Override
+                public void onTCPReceived(PacketHandlerContext<?> context) {
+                    long receiveTime = System.currentTimeMillis();
+                    if(receiveTime - firstSend.get() < 4950) {
+                        first.set(false);
+                        System.out.println("Received too early: " + (receiveTime - firstSend.get()));
+                    }
+                    System.out.println("Received: " + ((IntegerPacket)context.packet).value);
+                    receiveCount.incrementAndGet();
+                }
+            });
+        });
+        server.setServerOption(ServerOption.TCP_PACKET_CHECK_INTERVAL, 10);
+
+        server.startTCP().perform().get();
+
+        clientPacketRegistryContainer.getDefaultRegistry().registerDefaultPrimitivePackets();
+        client = networkFactory.createClient(clientNetworkData, bufferFactory, "localhost", 1234);
+        client.setChannelInitializer(channel -> {
+            channel.setChannelOption(ChannelOption.TCP_AUTO_FLUSH, true);
+
+            NetworkCondition condition = channel.getNetworkCondition();
+            condition.sendLatencySpeed = 5F;
+            condition.sendPacketLossRate = 0.50D;
+            condition.sendPacketLossStandardDeviation = 0.2D;
+            channel.enableNetworkCondition(true);
+        });
+
+
+
+        client.startTCP().perform().get();
+        client.startUDP().perform().get();
+
+        firstSend.set(System.currentTimeMillis());
+        for(int i = 0; i < 100; i++) {
+            client.getChannel().sendTCP(new IntegerPacket(i), null).perform();
+        }
+
+        Thread.sleep(10000);
+        System.out.println("Received: " + receiveCount.get());
+        assertTrue(receiveCount.get() == 100);
+        assertTrue(first.get());
+
 
     }
 
