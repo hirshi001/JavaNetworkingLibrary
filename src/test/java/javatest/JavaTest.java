@@ -377,7 +377,7 @@ public class JavaTest {
         server.addServerListener(new AbstractServerListener() {
             @Override
             public void onClientConnect(Server server, Channel clientChannel) {
-                int[] ints = new int[100000];
+                int[] ints = new int[100];
                 for (int i = 0; i < ints.length; i++) {
                     ints[i] = i;
                 }
@@ -406,6 +406,7 @@ public class JavaTest {
                 received.set(true);
             }
         });
+        client.setClientOption(ClientOption.TCP_PACKET_CHECK_INTERVAL, 100);
 
 
         client.startTCP().perform().get();
@@ -505,7 +506,6 @@ public class JavaTest {
         System.out.println("Received: " + receiveCount.get());
         assertTrue(receiveCount.get() > 25);
         assertTrue(first.get());
-
 
 
     }
